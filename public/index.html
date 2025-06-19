@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Survival Zone 2D</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="mainMenu">
+        <h1>Survival Zone 2D</h1>
+        <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
+        <button id="startSinglePlayerBtn">Modo Um Jogador</button>
+        <button id="startMultiplayerBtn">Modo Cooperativo (2P)</button>
+        <button id="showRankingBtn">🏆 Ver Ranking</button>
+    </div>
+
+    <div id="gameContainer" style="display: none;">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI do Jogo -->
+        <div id="ui">
+            <div id="hpBarContainer">
+                <span>HP</span>
+                <div id="hpBar"></div>
+            </div>
+            <div id="expBarContainer">
+                <span>EXP</span>
+                <div id="expBar"></div>
+            </div>
+            <div id="timer">Tempo: 0s</div>
+        </div>
+
+        <!-- Controles Touch (visíveis apenas em mobile) -->
+        <div id="touchControls">
+            <div id="leftStick">
+                <button id="moveLeftBtn">⬅️</button>
+                <button id="moveRightBtn">➡️</button>
+            </div>
+            <div id="rightStick">
+                <button id="jumpBtn">⬆️</button>
+                <button id="shootBtn">🎯</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Fim de Jogo -->
+    <div id="gameOverModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Fim de Jogo!</h2>
+            <p>Seu tempo de sobrevivência: <span id="finalTime">0</span>s</p>
+            <button id="restartBtn">Jogar Novamente</button>
+            <button id="backToMenuBtn">Voltar ao Menu</button>
+        </div>
+    </div>
+
+    <!-- Modal de Upgrade -->
+    <div id="upgradeModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Subiu de Nível!</h2>
+            <p>Escolha uma melhoria:</p>
+            <div id="upgradeOptions"></div>
+        </div>
+    </div>
+    
+    <!-- Modal do Ranking -->
+    <div id="rankingModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>🏆 Top Sobreviventes 🏆</h2>
+            <table id="rankingTable">
+                <thead>
+                    <tr>
+                        <th>Pos.</th>
+                        <th>Nome</th>
+                        <th>Tempo (s)</th>
+                        <th>Data</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Linhas do ranking serão inseridas aqui -->
+                </tbody>
+            </table>
+            <button id="closeRankingBtn">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
