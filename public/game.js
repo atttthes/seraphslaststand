@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ESTADO DAS HORDAS (para single-player) ---
     let spState = {
-        wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0, spawnCooldown: 0
+        wave: 0, waveState: 'intermission', waveTimer: 5 * 60
     };
 
     // --- CONFIGURAÇÕES DO JOGO ---
@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Posições no Canvas ---
     const DEFENSE_LINE_Y_RATIO = 0.5;
     const BOSS_LINE_Y_RATIO = 0.3;
+    const RICOCHET_LINE_Y_RATIO = 0.1125; // 180 / 1600
     const SNIPER_LINE_Y_VAL = 80;
 
     // --- CONFIGS DE HORDAS (espelhado do servidor) ---
@@ -73,18 +74,25 @@ document.addEventListener('DOMContentLoaded', () => {
         width: 25, height: 50, isSniper: true,
         speed: 1.0, horizontalSpeed: 0.5
     };
+    const RICOCHET_CONFIG = { 
+        color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
+        shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
+    };
     const BOSS_CONFIG = {
         color: '#FFFFFF', hp: 4000, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
         projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 15 * 60;
-    const ENEMIES_PER_WAVE = [10, 15];
 
     // --- Funções de escalonamento para SP ---
     function getSPWaveConfig(wave) {
         const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
         const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1);
         return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) };
+    }
+    function getSPRicochetConfig(wave) {
+        const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.12);
+        return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) };
     }
     function getSPBossConfig(wave) {
         const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
@@ -260,24 +268,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isMultiplayer) {
                 let targetY;
                 if (this.isSniper) targetY = SNIPER_LINE_Y_VAL;
+                else if (this.isRicochet) targetY = canvas.height * RICOCHET_LINE_Y_RATIO;
                 else if (this.isBoss) targetY = canvas.height * BOSS_LINE_Y_RATIO;
                 else targetY = canvas.height * DEFENSE_LINE_Y_RATIO;
 
                 if (!this.reachedPosition) {
-                    if (this.y < targetY) {
-                        this.y += this.speed;
-                    } else {
-                        this.y = targetY;
-                        this.reachedPosition = true;
-                        this.patrolOriginX = this.x;
-                        this.patrolRange = canvas.width * 0.1;
-                    }
+                    if (this.y < targetY) { this.y += this.speed; } 
+                    else { this.y = targetY; this.reachedPosition = true; this.patrolOriginX = this.x; this.patrolRange = canvas.width * (this.isBoss ? 0.3 : 0.1); }
                 } else {
-                    const moveDirection = Math.sign(player.x - this.x);
                     const patrolSpeed = this.horizontalSpeed || this.speed / 2;
-                    this.x += moveDirection * patrolSpeed;
-
-                    // Manter dentro da área de patrulha
+                    if (!this.isRicochet) {
+                        const moveDirection = Math.sign(player.x - this.x);
+                        this.x += moveDirection * patrolSpeed;
+                    }
                     const leftBoundary = this.patrolOriginX - (this.patrolRange / 2);
                     const rightBoundary = this.patrolOriginX + (this.patrolRange / 2);
                     if (this.x < leftBoundary) this.x = leftBoundary;
@@ -328,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeCanvas();
         player = new Player(canvas.width / 2, canvas.height - 100, 'white', playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; otherPlayers = {};
-        spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0, spawnCooldown: 0 };
+        spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60 };
         updateUI(); gameOverModal.style.display = 'none';
         
         if (isMultiplayer) {
@@ -380,11 +383,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (enemy) { Object.assign(enemy, enemyConfig); } 
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
+
             const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id));
             enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
-                if (!p) {
+                if (p) {
+                    p.x += (pData.x * scaleX - p.x) * 0.3; // Suaviza a posição
+                    p.y += (pData.y * scaleY - p.y) * 0.3;
+                    p.velocity.x = pData.vx * scaleX; // Sincroniza a velocidade para ricochetes
+                    p.velocity.y = pData.vy * scaleY;
+                } else {
                    const newProj = new Projectile(pData.x * scaleX, pData.y * scaleY, 0, 0, pData.damage, pData.color, 'enemy');
                    newProj.id = pData.id;
                    newProj.velocity.x = pData.vx * scaleX;
@@ -394,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             for(const id in state.players) {
-                if (id === socket.id) { // Sync local player's ally status from server
+                if (id === socket.id) {
                     if(state.players[id].hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!state.players[id].hasAlly && player.ally) player.ally = null;
                     continue;
@@ -405,7 +414,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 otherPlayers[id].x = pData.x * scaleX; otherPlayers[id].y = pData.y * scaleY;
                 otherPlayers[id].hp = pData.hp; otherPlayers[id].name = pData.name;
-                // Sync other players' allies
                 if (pData.hasAlly && !otherPlayers[id].ally) {
                     otherPlayers[id].ally = new Ally(otherPlayers[id]);
                 } else if (!pData.hasAlly && otherPlayers[id].ally) {
@@ -459,7 +467,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawFloor();
-        // A linha verde foi removida daqui.
     }
 
     function updateSinglePlayerLogic() {
@@ -469,56 +476,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 spState.wave++; spState.waveState = 'active';
                 const waveConfig = getSPWaveConfig(spState.wave);
 
-                spState.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0] + spState.wave;
-                spState.spawnCooldown = 0;
+                // Inimigos Normais
+                const normalEnemyCount = spState.wave + 2;
+                for(let i = 0; i < normalEnemyCount; i++) {
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: waveConfig.speed / 2 };
+                    setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
+                }
 
-                if (spState.wave >= 2) {
-                    const sniperCount = Math.min(8, (spState.wave - 1) * 2);
+                // Snipers
+                if (spState.wave >= 3) {
+                    const sniperCount = 1 + (spState.wave - 3) * 2;
                     for (let i = 0; i < sniperCount; i++) {
                         const sniperConfig = {
-                            ...SNIPER_BASE_CONFIG, id: `sniper_${Date.now()}_${Math.random()}`,
-                            x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width), y: -50,
+                            ...SNIPER_BASE_CONFIG, id: `sniper_${Date.now()}_${i}`, x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width), y: -50,
                             hp: waveConfig.hp * SNIPER_BASE_CONFIG.hpMultiplier, damage: waveConfig.damage * SNIPER_BASE_CONFIG.damageMultiplier,
                             projectileDamage: waveConfig.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier, shootCooldown: waveConfig.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier
                         };
                         enemies.push(new Enemy(sniperConfig));
                     }
                 }
+                
+                // Ricochets
+                if (spState.wave >= 4 && (spState.wave - 4) % 3 === 0) {
+                    const ricochetCount = Math.floor((spState.wave - 4) / 3) + 1;
+                    const ricochetConfigBase = getSPRicochetConfig(spState.wave);
+                    for (let i = 0; i < ricochetCount; i++) {
+                        const ricochetConfig = {
+                            ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`,
+                            x: Math.random() * (canvas.width - ricochetConfigBase.width), y: -50,
+                        };
+                        enemies.push(new Enemy(ricochetConfig));
+                    }
+                }
 
-                if (spState.wave >= 5) {
-                    const bossCount = spState.wave - 4;
+                // Chefes
+                if (spState.wave >= 5 && (spState.wave - 5) % 2 === 0) {
+                    const bossCount = Math.floor((spState.wave - 5) / 2) + 1;
                     for (let i = 0; i < bossCount; i++) {
                         const bossConfig = {
-                            ...getSPBossConfig(spState.wave), id: `boss_${Date.now()}_${Math.random()}`,
+                            ...getSPBossConfig(spState.wave), id: `boss_${Date.now()}_${i}`,
                             x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height,
                         };
                         enemies.push(new Enemy(bossConfig));
                     }
                 }
             }
-        } else if (spState.waveState === 'active' && enemies.length === 0 && spState.enemiesToSpawn === 0) {
+        } else if (spState.waveState === 'active' && enemies.length === 0) {
             spState.waveState = 'intermission';
             spState.waveTimer = WAVE_INTERVAL_TICKS;
-        }
-
-        if (spState.waveState === 'active' && spState.enemiesToSpawn > 0) {
-            spState.spawnCooldown--;
-            if (spState.spawnCooldown <= 0) {
-                const config = getSPWaveConfig(spState.wave);
-                const enemyConfig = { ...config, id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: config.speed / 2 };
-                enemies.push(new Enemy(enemyConfig));
-                spState.enemiesToSpawn--;
-                spState.spawnCooldown = 180 / (1 + spState.wave * 0.05);
-            }
         }
 
         enemies.forEach(enemy => {
             const now = Date.now();
             if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                 enemy.lastShotTime = now;
-                const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
-                const bulletColor = enemy.color;
-                enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, bulletColor, 'enemy'));
+                if (enemy.isRicochet) {
+                    for (let i = 0; i < 2; i++) {
+                        setTimeout(() => {
+                            const targetX = (enemy.x < canvas.width / 2) ? canvas.width : 0;
+                            const targetY = enemy.y + 300 + Math.random() * 200;
+                            const baseAngle = Math.atan2(targetY - (enemy.y + enemy.height / 2), targetX - (enemy.x + enemy.width / 2));
+                            const finalAngle = baseAngle + (Math.PI / 6);
+                            const proj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, finalAngle, 8, enemy.projectileDamage, enemy.color, 'enemy');
+                            proj.canRicochet = true; proj.bouncesLeft = 1;
+                            enemyProjectiles.push(proj);
+                        }, i * 200);
+                    }
+                } else {
+                    const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
+                    enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, enemy.color, 'enemy'));
+                }
             }
         });
     }
@@ -546,9 +573,19 @@ document.addEventListener('DOMContentLoaded', () => {
             p.update();
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
         });
+        
         enemyProjectiles.forEach((p, i) => {
+            if (!isMultiplayer && p.canRicochet && p.bouncesLeft > 0) {
+                if (p.x <= p.radius || p.x >= canvas.width - p.radius) {
+                    p.velocity.x *= -1;
+                    p.bouncesLeft--;
+                    p.x = p.x <= p.radius ? p.radius + 1 : canvas.width - p.radius - 1;
+                }
+            }
             p.update();
-            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) enemyProjectiles.splice(i, 1);
+            if (p.x < -50 || p.x > canvas.width+50 || p.y < -50 || p.y > canvas.height+50) {
+                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
+            }
         });
 
         // --- LÓGICA DE COLISÃO ---
@@ -560,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (checkCollision(p, ep)) {
                     if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', ep.id);
                     projectiles.splice(i, 1);
-                    enemyProjectiles.splice(j, 1);
+                    if (!isMultiplayer) enemyProjectiles.splice(j, 1);
                     break; 
                 }
             }
@@ -570,10 +607,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const p = enemyProjectiles[i];
             if (checkCollision(player, p)) {
                 player.takeDamage(p.damage);
-                enemyProjectiles.splice(i, 1);
+                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
             } else if (player.ally && checkCollision(player.ally, p)) {
                 player.ally.takeDamage(p.damage);
-                enemyProjectiles.splice(i, 1);
+                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
             }
         }
 
@@ -590,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
-                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : 50);
+                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
                                 if (currentIndex !== -1) {
