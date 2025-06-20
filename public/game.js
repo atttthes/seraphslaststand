@@ -30,6 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const rankingTableBody = document.querySelector('#rankingTable tbody');
     const closeRankingBtn = document.getElementById('closeRankingBtn');
 
+    // Controles Touch
+    const touchLeftBtn = document.getElementById('touchLeft');
+    const touchRightBtn = document.getElementById('touchRight');
+    const touchJumpBtn = document.getElementById('touchJump');
+    const touchShootBtn = document.getElementById('touchShoot');
+
+
     // --- ESTADO DO JOGO ---
     let isGameRunning = false;
     let isPaused = false;
@@ -62,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.speed = 5;
             this.jumpForce = 12;
             this.onGround = false;
+            this.direction = 1; // 1 para direita, -1 para esquerda
             
             this.maxHp = 100; this.hp = this.maxHp;
             this.isInvincible = false;
@@ -89,23 +97,25 @@ document.addEventListener('DOMContentLoaded', () => {
         update() {
             this.draw();
             this.y += this.velocityY;
-            if (keys.a.pressed && this.x > 0) this.x -= this.speed;
-            if (keys.d.pressed && this.x < canvas.width - this.width) this.x += this.speed;
-            if (this.y + this.height + this.velocityY < canvas.height) {
-                this.velocityY += gravity;
-                this.onGround = false;
-            } else {
+
+            if (keys.a.pressed && this.x > 0) {
+                this.x -= this.speed;
+                this.direction = -1;
+            }
+            if (keys.d.pressed && this.x < canvas.width - this.width) {
+                this.x += this.speed;
+                this.direction = 1;
+            }
+
+            // Colisão com o chão
+            if (this.y + this.height + this.velocityY >= canvas.height) {
                 this.velocityY = 0;
                 this.onGround = true;
                 this.y = canvas.height - this.height;
+            } else {
+                this.velocityY += gravity;
+                this.onGround = false;
             }
-            platforms.forEach(platform => {
-                if (this.y + this.height <= platform.y && this.y + this.height + this.velocityY >= platform.y && this.x + this.width >= platform.x && this.x <= platform.x + platform.width) {
-                    this.velocityY = 0;
-                    this.onGround = true;
-                    this.y = platform.y - this.height;
-                }
-            });
         }
         
         jump() {
@@ -197,19 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         update() { this.draw(); this.x += this.velocity.x; this.y += this.velocity.y; }
     }
-
-    class Platform {
-        constructor(x, y, width, height) {
-            this.x = x; this.y = y;
-            this.width = width; this.height = height;
-        }
-        draw() {
-            ctx.strokeStyle = NEON_GREEN;
-            ctx.lineWidth = STROKE_WIDTH;
-            ctx.strokeRect(this.x, this.y, this.width, this.height);
-        }
-    }
-
+    
     // --- FUNÇÕES DO JOGO ---
     function cleanup() {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
@@ -237,20 +235,13 @@ document.addEventListener('DOMContentLoaded', () => {
         isGameOver = false;
         gameTime = 0;
         
-        canvas.width = gameContainer.clientWidth;
-        canvas.height = gameContainer.clientHeight;
+        canvas.width = 1600; // Mapa mais largo
+        canvas.height = 800;
         
         player = new Player(canvas.width / 2, canvas.height - 100, NEON_GREEN, playerName);
         projectiles = []; enemies = []; particles = []; otherPlayers = {};
 
-        platforms = [
-            new Platform(0, canvas.height - 40, 200, 40),
-            new Platform(canvas.width - 200, canvas.height - 40, 200, 40),
-            new Platform(300, canvas.height - 150, 150, 20),
-            new Platform(550, canvas.height - 250, 150, 20),
-            new Platform(100, canvas.height - 350, 150, 20),
-            new Platform(canvas.width - 250, canvas.height - 450, 150, 20),
-        ];
+        platforms = []; // Removemos as plataformas, deixando apenas o chão.
 
         updateUI();
         gameOverModal.style.display = 'none';
@@ -327,9 +318,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const hp = 100 + gameTime * 2;
         const speed = 0.5 + gameTime * 0.01;
         const damage = 10 + gameTime * 0.1;
-        const x = Math.random() < 0.5 ? 0 : canvas.width;
-        enemies.push(new Enemy(x, Math.random() * canvas.height * 0.5, hp, speed, damage));
+        const side = Math.random() < 0.5 ? 0 - 50 : canvas.width + 50; // Nasce fora da tela
+        const y = Math.random() * (canvas.height - 200); // Evita nascer no chão
+        enemies.push(new Enemy(side, y, hp, speed, damage));
     }
+
 
     function animate() {
         if (isGameOver) {
@@ -431,6 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- EVENT LISTENERS ---
+    // Teclado
     window.addEventListener('keydown', (e) => {
         if (!isGameRunning) return;
         switch (e.code) {
@@ -446,8 +440,26 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'KeyD': case 'ArrowRight': keys.d.pressed = false; break;
         }
     });
+    // Mouse
     canvas.addEventListener('mousemove', (e) => { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
     canvas.addEventListener('mousedown', () => { if (isGameRunning && !isPaused) player.shoot(mouse.x, mouse.y); });
+
+    // Controles de Toque
+    touchLeftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.a.pressed = true; });
+    touchLeftBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.a.pressed = false; });
+    touchRightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.d.pressed = true; });
+    touchRightBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.d.pressed = false; });
+    touchJumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (isGameRunning && !isPaused) player.jump(); });
+    touchShootBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (isGameRunning && !isPaused) {
+            // Atira na direção que o jogador está "olhando"
+            const targetX = player.x + player.width / 2 + (100 * player.direction);
+            const targetY = player.y + player.height / 2;
+            player.shoot(targetX, targetY);
+        }
+    });
+
 
     // Botões
     startSinglePlayerBtn.addEventListener('click', () => startGame(false));

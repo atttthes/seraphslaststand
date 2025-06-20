@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Survival Zone 2D</title>
+    <title>Neon Outbreak</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <body>
 
     <div id="mainMenu">
-        <h1>Survival Zone 2D</h1>
+        <h1>Neon Outbreak</h1>
         <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
         <button id="startSinglePlayerBtn">Modo Um Jogador</button>
         <button id="startMultiplayerBtn">Modo Cooperativo (até 4P)</button>
@@ -43,7 +43,14 @@
 
         <!-- Controles Touch (visíveis apenas em mobile) -->
         <div id="touchControls">
-            <!-- ... controles de toque ... -->
+            <div class="touch-group">
+                <button id="touchLeft" class="touch-btn">◀</button>
+                <button id="touchRight" class="touch-btn">▶</button>
+            </div>
+            <div class="touch-group">
+                <button id="touchShoot" class="touch-btn">⦿</button>
+                <button id="touchJump" class="touch-btn">▲</button>
+            </div>
         </div>
     </div>
     

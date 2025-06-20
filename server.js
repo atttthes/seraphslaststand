@@ -12,11 +12,15 @@ const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 
 // --- Configuração do Express ---
-app.use(express.static(path.join(__dirname, 'public')));
+// ATENÇÃO: A pasta 'public' não existe nos arquivos fornecidos, então servi os arquivos da raiz.
+// Se você criar uma pasta 'public' e mover index.html, style.css e game.js para dentro, descomente a linha abaixo.
+// app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname)); // Servindo da raiz
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    // Se usar a pasta 'public', mude para path.join(__dirname, 'public', 'index.html')
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // --- API para o Ranking ---
@@ -47,6 +51,7 @@ app.post('/api/ranking', async (req, res) => {
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
+const CANVAS_WIDTH = 1600; // Largura do mapa atualizada
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -78,14 +83,24 @@ setInterval(() => {
             if (room.gameTime % 5 === 0) {
                 const enemy = {
                     id: `enemy_${Date.now()}_${Math.random()}`,
-                    x: Math.random() * 1000, // Largura do canvas
-                    y: 0,
+                    x: Math.random() < 0.5 ? -50 : CANVAS_WIDTH + 50, // Nasce fora da tela
+                    y: Math.random() * 600, // Altura do canvas - um pouco
                     hp: 100 + (room.gameTime * 0.5),
                     speed: 1.25,
                     damage: 12.5
                 };
                 room.enemies.push(enemy);
             }
+            
+            // Atualiza posição dos inimigos
+            room.enemies.forEach(enemy => {
+                // Lógica de movimento simples (pode ser aprimorada para seguir o jogador mais próximo)
+                // Aqui, vamos apenas movê-los para o centro para simplificar
+                const targetX = CANVAS_WIDTH / 2;
+                const angle = Math.atan2(400 - enemy.y, targetX - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+            });
 
             // Enviar o estado atualizado para todos os jogadores na sala específica
             io.to(roomName).emit('gameState', room);
@@ -96,7 +111,7 @@ setInterval(() => {
             delete rooms[roomName];
         }
     }
-}, 1000); // Atualiza o estado a cada segundo
+}, 1000/60); // Loop mais rápido para movimento suave do inimigo
 
 
 io.on('connection', (socket) => {
@@ -113,7 +128,7 @@ io.on('connection', (socket) => {
             ...playerData
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
-        io.to(roomName).emit('playerJoined', room.players);
+        // Não emite mais 'playerJoined', pois 'gameState' já envia tudo
     });
 
     socket.on('playerUpdate', (data) => {
