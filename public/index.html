@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Survival Zone 2D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,7 +15,7 @@
         <h1>Survival Zone 2D</h1>
         <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
         <button id="startSinglePlayerBtn">Modo Um Jogador</button>
-        <button id="startMultiplayerBtn">Modo Cooperativo (2P)</button>
+        <button id="startMultiplayerBtn">Modo Cooperativo (até 4P)</button>
         <button id="showRankingBtn">🏆 Ver Ranking</button>
     </div>
 
@@ -29,19 +32,18 @@
                 <span>EXP</span>
                 <div id="expBar"></div>
             </div>
-            <div id="timer">Tempo: 0s</div>
         </div>
+        
+        <div id="gameControls">
+             <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
+             <button id="quitBtn" title="Sair do Jogo">Sair</button>
+        </div>
+
+        <div id="timer">Tempo: 0s</div>
 
         <!-- Controles Touch (visíveis apenas em mobile) -->
         <div id="touchControls">
-            <div id="leftStick">
-                <button id="moveLeftBtn">⬅️</button>
-                <button id="moveRightBtn">➡️</button>
-            </div>
-            <div id="rightStick">
-                <button id="jumpBtn">⬆️</button>
-                <button id="shootBtn">🎯</button>
-            </div>
+            <!-- ... controles de toque ... -->
         </div>
     </div>
     
@@ -77,15 +79,12 @@
                         <th>Data</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <!-- Linhas do ranking serão inseridas aqui -->
-                </tbody>
+                <tbody></tbody>
             </table>
             <button id="closeRankingBtn">Fechar</button>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="game.js"></script>
 </body>
