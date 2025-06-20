@@ -12,16 +12,22 @@ const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 
 // --- Configuração do Express ---
-// ATENÇÃO: A pasta 'public' não existe nos arquivos fornecidos, então servi os arquivos da raiz.
-// Se você criar uma pasta 'public' e mover index.html, style.css e game.js para dentro, descomente a linha abaixo.
-// app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname)); // Servindo da raiz
+// CORREÇÃO: Ajuste para funcionar tanto localmente quanto na Render.
+// Na Render, o script roda de uma pasta 'src', mas os arquivos estáticos (html, css)
+// ficam na raiz do projeto. Detectamos o ambiente da Render pela variável de ambiente.
+const isProductionOnRender = process.env.RENDER === 'true';
+const publicPath = isProductionOnRender ? path.join(__dirname, '..') : __dirname;
+
+app.use(express.static(publicPath));
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    // Se usar a pasta 'public', mude para path.join(__dirname, 'public', 'index.html')
-    res.sendFile(path.join(__dirname, 'index.html'));
+    // CORREÇÃO: O caminho para o index.html também é ajustado.
+    // Embora o express.static geralmente sirva o index.html por padrão na rota '/',
+    // ter este fallback explícito e correto é uma boa prática.
+    res.sendFile(path.join(publicPath, 'index.html'));
 });
+
 
 // --- API para o Ranking ---
 app.get('/api/ranking', async (req, res) => {
