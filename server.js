@@ -51,20 +51,20 @@ const LOGICAL_WIDTH = 900;
 const LOGICAL_HEIGHT = 1600;
 const GAME_TICK_RATE = 1000 / 60;
 
-// --- ATUALIZADO: Constantes de Posição ---
+// --- Constantes de Posição ---
 const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5;
 const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3;
-const SNIPER_LINE_Y = 80; // Posição dos snipers mais abaixo
+const SNIPER_LINE_Y = 80;
 
 const ENEMY_SPAWN_INTERVAL_TICKS = 3 * (1000 / GAME_TICK_RATE);
 
 // --- Configurações das Hordas e Chefe ---
 const WAVE_CONFIG = [
-    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 }, // Horda 1
-    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 }, // Horda 2
-    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 }, // Horda 3
-    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 }, // Horda 4
-    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }  // Horda 5+ (base)
+    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 },
+    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 },
+    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 },
+    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
+    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
 ];
 const BOSS_CONFIG = {
     color: '#FFFFFF', hp: 4000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
@@ -72,25 +72,15 @@ const BOSS_CONFIG = {
 const WAVE_INTERVAL_SECONDS = 15;
 const ENEMIES_PER_WAVE = [10, 15];
 
-// --- NOVO: Função para escalar dificuldade em hordas infinitas ---
+// --- Função para escalar dificuldade ---
 function getWaveConfig(wave) {
     const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
-    const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1); // Aumenta 10% a cada horda após a 5ª
-    return {
-        ...baseConfig,
-        hp: Math.floor(baseConfig.hp * scalingFactor),
-        damage: Math.floor(baseConfig.damage * scalingFactor),
-        projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor)
-    };
+    const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1);
+    return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) };
 }
 function getBossConfig(wave) {
-    const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15); // Chefes escalam 15% por horda
-    return {
-        ...BOSS_CONFIG,
-        hp: Math.floor(BOSS_CONFIG.hp * scalingFactor),
-        damage: Math.floor(BOSS_CONFIG.damage * scalingFactor),
-        projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor)
-    };
+    const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
+    return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
 }
 
 function findOrCreateRoom() {
@@ -101,69 +91,49 @@ function findOrCreateRoom() {
     }
     const newRoomName = `room_${Date.now()}`;
     rooms[newRoomName] = {
-        players: {},
-        enemies: [],
-        enemyProjectiles: [],
-        gameTime: 0,
-        wave: 0,
-        waveState: 'intermission', // intermission, active
-        waveTimer: 5,
-        enemiesToSpawn: 0,
-        spawnCooldown: 0,
+        players: {}, enemies: [], enemyProjectiles: [],
+        gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
+        enemiesToSpawn: 0, spawnCooldown: 0,
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
 }
 
 function spawnEnemy(room, waveConfig) {
-    const enemy = {
+    room.enemies.push({
         id: `enemy_${Date.now()}_${Math.random()}`,
-        x: Math.random() * (LOGICAL_WIDTH - 40),
-        y: -50,
-        width: 40, height: 40,
-        ...waveConfig,
-        maxHp: waveConfig.hp,
-        lastShotTime: 0,
-    };
-    room.enemies.push(enemy);
+        x: Math.random() * (LOGICAL_WIDTH - 40), y: -50,
+        width: 40, height: 40, ...waveConfig, maxHp: waveConfig.hp,
+        lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
+        horizontalSpeed: waveConfig.speed / 2,
+    });
 }
 
 function spawnSniper(room, waveConfig) {
-    const sniper = {
+    room.enemies.push({
         id: `sniper_${Date.now()}_${Math.random()}`,
-        x: Math.random() * (LOGICAL_WIDTH - 25),
-        y: -50, // Nasce no topo e se move para a SNIPER_LINE_Y
-        width: 25, height: 50,
-        color: '#00FFFF',
-        hp: waveConfig.hp * 0.8,
-        speed: 1.0, // Velocidade para chegar na posição
-        horizontalSpeed: 0.5, // Velocidade de movimento lateral
-        damage: waveConfig.damage * 0.5,
-        projectileDamage: waveConfig.projectileDamage * 1.15,
+        x: Math.random() * (LOGICAL_WIDTH - 25), y: -50,
+        width: 25, height: 50, color: '#00FFFF',
+        hp: waveConfig.hp * 0.8, speed: 1.0, horizontalSpeed: 0.5,
+        damage: waveConfig.damage * 0.5, projectileDamage: waveConfig.projectileDamage * 1.15,
         shootCooldown: waveConfig.shootCooldown * 1.30,
-        isSniper: true,
-        maxHp: waveConfig.hp * 0.8,
-        lastShotTime: 0,
-    };
-    room.enemies.push(sniper);
+        isSniper: true, maxHp: waveConfig.hp * 0.8, lastShotTime: 0,
+        patrolOriginX: null, reachedPosition: false,
+    });
 }
 
 function spawnBoss(room, wave) {
     const bossConfig = getBossConfig(wave);
-    const boss = {
+    room.enemies.push({
         id: `boss_${Date.now()}_${Math.random()}`,
-        x: LOGICAL_WIDTH / 2 - bossConfig.width / 2,
-        y: -bossConfig.height, // Nasce no topo
-        ...bossConfig,
-        horizontalSpeed: bossConfig.speed, // Renomeado para clareza
-        speed: 1.2, // Velocidade para descer até a posição
-        maxHp: bossConfig.hp,
-        lastShotTime: 0,
-    };
-    room.enemies.push(boss);
+        x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height,
+        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 1.2,
+        maxHp: bossConfig.hp, lastShotTime: 0,
+        patrolOriginX: null, reachedPosition: false,
+    });
 }
 
-// Game loop do servidor: A fonte da verdade
+// Game loop do servidor
 setInterval(() => {
     for (const roomName in rooms) {
         const room = rooms[roomName];
@@ -177,34 +147,22 @@ setInterval(() => {
 
         room.gameTime++;
 
-        // --- ATUALIZADO: LÓGICA DE HORDAS INFINITAS ---
-        if (room.gameTime > 1 && room.gameTime % 60 === 0) { // Lógica de timer a cada segundo
+        // LÓGICA DE HORDAS
+        if (room.gameTime > 1 && room.gameTime % 60 === 0) {
             if (room.waveState === 'intermission') {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
-                    // Inicia nova horda
-                    room.wave++;
-                    room.waveState = 'active';
+                    room.wave++; room.waveState = 'active';
                     const waveConfig = getWaveConfig(room.wave);
-                    
-                    // Spawna inimigos normais
                     room.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0] + room.wave;
                     room.spawnCooldown = 0;
-
-                    // Spawna Snipers a partir da horda 2
                     if (room.wave >= 2) {
-                        const sniperCount = Math.min(8, (room.wave - 1) * 2); // Limita a 8 snipers
-                        for (let i = 0; i < sniperCount; i++) {
-                            spawnSniper(room, waveConfig);
-                        }
+                        const sniperCount = Math.min(8, (room.wave - 1) * 2);
+                        for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig);
                     }
-                    
-                    // Spawna Chefes a partir da horda 5
                     if (room.wave >= 5) {
                         const bossCount = room.wave - 4;
-                        for (let i = 0; i < bossCount; i++) {
-                            spawnBoss(room, room.wave);
-                        }
+                        for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave);
                     }
                 }
             } else if (room.waveState === 'active' && room.enemies.length === 0 && room.enemiesToSpawn === 0) {
@@ -214,81 +172,61 @@ setInterval(() => {
             }
         }
 
-        // SPAWN PERIÓDICO DE INIMIGOS TERRESTRES
         if (room.waveState === 'active' && room.enemiesToSpawn > 0) {
             room.spawnCooldown--;
             if (room.spawnCooldown <= 0) {
                 spawnEnemy(room, getWaveConfig(room.wave));
                 room.enemiesToSpawn--;
-                room.spawnCooldown = ENEMY_SPAWN_INTERVAL_TICKS / (1 + room.wave * 0.05); // Aumenta a velocidade de spawn com o tempo
+                room.spawnCooldown = ENEMY_SPAWN_INTERVAL_TICKS / (1 + room.wave * 0.05);
             }
         }
 
-        // --- ATUALIZADO: IA DOS INIMIGOS ---
+        // IA DOS INIMIGOS
         room.enemies.forEach(enemy => {
             const targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0] : null;
             let canShoot = false;
 
-            if (enemy.isSniper) {
-                if (enemy.y < SNIPER_LINE_Y) { // Move para a posição
+            let targetY;
+            if (enemy.isSniper) targetY = SNIPER_LINE_Y;
+            else if (enemy.isBoss) targetY = BOSS_LINE_Y;
+            else targetY = DEFENSE_LINE_Y;
+
+            if (!enemy.reachedPosition) {
+                if (enemy.y < targetY) {
                     enemy.y += enemy.speed;
                 } else {
-                    enemy.y = SNIPER_LINE_Y;
-                    canShoot = true;
-                    if (targetPlayer) {
-                        const moveDirection = Math.sign(targetPlayer.x - enemy.x);
-                        if (Math.abs(targetPlayer.x - enemy.x) > enemy.horizontalSpeed * 5) {
-                            enemy.x += moveDirection * enemy.horizontalSpeed;
-                        }
-                    }
+                    enemy.y = targetY;
+                    enemy.reachedPosition = true;
+                    enemy.patrolOriginX = enemy.x; // Define o ponto central de patrulha
                 }
-            } else if (enemy.isBoss) {
-                if (enemy.y < BOSS_LINE_Y) { // Move para a posição
-                    enemy.y += enemy.speed;
-                } else {
-                    enemy.y = BOSS_LINE_Y;
-                    canShoot = true;
-                    // Movimento horizontal do chefe
-                     if (targetPlayer) {
-                         const moveDirection = Math.sign(targetPlayer.x - enemy.x);
-                        if (moveDirection !== 0 && Math.abs(targetPlayer.x - enemy.x) > enemy.horizontalSpeed) {
-                           enemy.x += moveDirection * enemy.horizontalSpeed;
-                        }
-                    }
-                }
-            } else { // Inimigos terrestres
-                if (enemy.y < DEFENSE_LINE_Y) {
-                    enemy.y += enemy.speed;
-                } else {
-                    enemy.y = DEFENSE_LINE_Y;
-                    canShoot = true;
-                    if (targetPlayer) {
-                        const moveDirection = Math.sign(targetPlayer.x - enemy.x);
-                        if (moveDirection !== 0 && Math.abs(targetPlayer.x - enemy.x) > enemy.speed) {
-                           enemy.x += moveDirection * enemy.speed;
-                        }
-                    }
+            } else {
+                canShoot = true;
+                if (targetPlayer) {
+                    const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
+                    const moveDirection = Math.sign(targetPlayer.x - enemy.x);
+                    enemy.x += moveDirection * patrolSpeed;
+
+                    // Mantém o inimigo dentro de sua faixa de patrulha (10% da tela)
+                    const patrolRange = LOGICAL_WIDTH * 0.1;
+                    const leftBoundary = enemy.patrolOriginX - (patrolRange / 2);
+                    const rightBoundary = enemy.patrolOriginX + (patrolRange / 2);
+                    if (enemy.x < leftBoundary) enemy.x = leftBoundary;
+                    if (enemy.x > rightBoundary - enemy.width) enemy.x = rightBoundary - enemy.width;
                 }
             }
-            // Evitar que inimigos saiam da tela
+            
             if (enemy.x < 0) enemy.x = 0;
             if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
             
-            // Lógica de Disparo
             if (canShoot && targetPlayer) {
                 const now = Date.now();
                 if (now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                     enemy.lastShotTime = now;
                     const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (targetPlayer.x + 20) - (enemy.x + enemy.width / 2));
                     room.enemyProjectiles.push({
-                        id: `ep_${now}_${Math.random()}`,
-                        x: enemy.x + enemy.width / 2,
-                        y: enemy.y + enemy.height / 2,
-                        vx: Math.cos(angle) * 7,
-                        vy: Math.sin(angle) * 7,
-                        damage: enemy.projectileDamage,
-                        color: enemy.color,
-                        isSniper: !!enemy.isSniper
+                        id: `ep_${now}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
+                        vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7,
+                        damage: enemy.projectileDamage, color: enemy.color
                     });
                 }
             }
@@ -326,7 +264,7 @@ io.on('connection', (socket) => {
         socket.room = roomName;
 
         const room = rooms[roomName];
-        room.players[socket.id] = { id: socket.id, ...playerData };
+        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, allyCooldownWave: 0 };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
@@ -357,11 +295,25 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NOVO: Evento para registrar a interceptação de projéteis ---
     socket.on('enemyProjectileDestroyed', (projectileId) => {
         const room = rooms[socket.room];
         if (room) {
             room.enemyProjectiles = room.enemyProjectiles.filter(p => p.id !== projectileId);
+        }
+    });
+
+    socket.on('playerGotAlly', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].hasAlly = true;
+        }
+    });
+
+    socket.on('playerLostAlly', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].hasAlly = false;
+            room.players[socket.id].allyCooldownWave = room.wave + 2;
         }
     });
 
