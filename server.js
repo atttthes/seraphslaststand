@@ -9,25 +9,21 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const PORT = process.env.PORT || 3000;
+// A porta 10000 é geralmente usada pelo Render, mas usar process.env.PORT é a melhor prática.
+const PORT = process.env.PORT || 10000;
 
 // --- Configuração do Express ---
-// CORREÇÃO: Ajuste para funcionar tanto localmente quanto na Render.
-// Na Render, o script roda de uma pasta 'src', mas os arquivos estáticos (html, css)
-// ficam na raiz do projeto. Detectamos o ambiente da Render pela variável de ambiente.
-const isProductionOnRender = process.env.RENDER === 'true';
-const publicPath = isProductionOnRender ? path.join(__dirname, '..') : __dirname;
 
-app.use(express.static(publicPath));
+// CORREÇÃO: Informa ao Express para servir arquivos estáticos (CSS, JS do cliente, imagens)
+// a partir da pasta 'public'.
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(express.json());
 
+// CORREÇÃO: Rota principal que agora aponta para o index.html dentro da pasta 'public'.
 app.get('/', (req, res) => {
-    // CORREÇÃO: O caminho para o index.html também é ajustado.
-    // Embora o express.static geralmente sirva o index.html por padrão na rota '/',
-    // ter este fallback explícito e correto é uma boa prática.
-    res.sendFile(path.join(publicPath, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
 
 // --- API para o Ranking ---
 app.get('/api/ranking', async (req, res) => {
@@ -187,6 +183,7 @@ async function startServer() {
     try {
         await db.connect();
         server.listen(PORT, () => {
+            // Esta mensagem agora aparecerá nos logs da Render
             console.log(`Servidor rodando com sucesso na porta ${PORT}`);
         });
     } catch (err) {
