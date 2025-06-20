@@ -41,15 +41,16 @@
 
         <div id="timer">Tempo: 0s</div>
 
-        <!-- Controles Touch (visíveis apenas em mobile) -->
+        <!-- Controles Touch (visíveis apenas em mobile) - ATUALIZADO COM JOYSTICKS -->
         <div id="touchControls">
-            <div class="touch-group">
-                <button id="touchLeft" class="touch-btn">◀</button>
-                <button id="touchRight" class="touch-btn">▶</button>
+            <div id="moveJoystick" class="joystick-container">
+                <div id="moveJoystickKnob" class="joystick-knob"></div>
             </div>
-            <div class="touch-group">
-                <button id="touchShoot" class="touch-btn">⦿</button>
-                <button id="touchJump" class="touch-btn">▲</button>
+            
+            <button id="touchJump" class="touch-btn">▲</button>
+            
+            <div id="aimJoystick" class="joystick-container">
+                <div id="aimJoystickKnob" class="joystick-knob"></div>
             </div>
         </div>
     </div>

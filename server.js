@@ -9,18 +9,12 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// A porta 10000 é geralmente usada pelo Render, mas usar process.env.PORT é a melhor prática.
 const PORT = process.env.PORT || 10000;
 
 // --- Configuração do Express ---
-
-// CORREÇÃO: Informa ao Express para servir arquivos estáticos (CSS, JS do cliente, imagens)
-// a partir da pasta 'public'.
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(express.json());
 
-// CORREÇÃO: Rota principal que agora aponta para o index.html dentro da pasta 'public'.
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -53,7 +47,10 @@ app.post('/api/ranking', async (req, res) => {
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
-const CANVAS_WIDTH = 1600; // Largura do mapa atualizada
+// ATUALIZADO: Dimensões lógicas do mapa em modo retrato (vertical)
+const LOGICAL_WIDTH = 900;
+const LOGICAL_HEIGHT = 1600;
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.65; // Linha onde os inimigos param
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -71,49 +68,69 @@ function findOrCreateRoom() {
     return newRoomName;
 }
 
-// Game loop do servidor: A fonte da verdade para o estado do jogo compartilhado.
+// Game loop do servidor: A fonte da verdade
 setInterval(() => {
-    // Itera sobre todas as salas ativas
     for (const roomName in rooms) {
         const room = rooms[roomName];
-        
-        // Só roda a lógica se houver jogadores na sala
-        if (Object.keys(room.players).length > 0) {
+        const playerList = Object.values(room.players);
+
+        if (playerList.length > 0) {
             room.gameTime++;
 
-            // Lógica de spawn de inimigos (exemplo para esta sala)
-            if (room.gameTime % 5 === 0) {
+            // Lógica de spawn de inimigos
+            if (room.gameTime > 1 && room.gameTime % 4 === 0) {
                 const enemy = {
                     id: `enemy_${Date.now()}_${Math.random()}`,
-                    x: Math.random() < 0.5 ? -50 : CANVAS_WIDTH + 50, // Nasce fora da tela
-                    y: Math.random() * 600, // Altura do canvas - um pouco
-                    hp: 100 + (room.gameTime * 0.5),
-                    speed: 1.25,
-                    damage: 12.5
+                    x: Math.random() * LOGICAL_WIDTH,
+                    y: -50, // Nasce no topo, fora da tela
+                    hp: 100 + (room.gameTime * 0.75),
+                    speed: 1.25 + (room.gameTime * 0.005),
+                    damage: 15
                 };
                 room.enemies.push(enemy);
             }
             
-            // Atualiza posição dos inimigos
+            // Atualiza posição dos inimigos (NOVA LÓGICA)
             room.enemies.forEach(enemy => {
-                // Lógica de movimento simples (pode ser aprimorada para seguir o jogador mais próximo)
-                // Aqui, vamos apenas movê-los para o centro para simplificar
-                const targetX = CANVAS_WIDTH / 2;
-                const angle = Math.atan2(400 - enemy.y, targetX - enemy.x);
-                enemy.x += Math.cos(angle) * enemy.speed;
-                enemy.y += Math.sin(angle) * enemy.speed;
+                let targetX = LOGICAL_WIDTH / 2; // Padrão se não houver jogador
+                
+                // Encontra o jogador mais próximo para mirar
+                let closestPlayer = null;
+                let minDistance = Infinity;
+                playerList.forEach(player => {
+                    const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestPlayer = player;
+                    }
+                });
+
+                if (closestPlayer) {
+                    targetX = closestPlayer.x;
+                }
+
+                // Inimigos param na linha de defesa
+                if (enemy.y >= DEFENSE_LINE_Y) {
+                    // Já está na linha, apenas se move horizontalmente
+                    const angle = Math.atan2(0, targetX - enemy.x); // Angulo 0 para Y
+                    enemy.x += Math.cos(angle) * enemy.speed;
+                } else {
+                    // Move-se em direção ao alvo
+                    const angle = Math.atan2(DEFENSE_LINE_Y - enemy.y, targetX - enemy.x);
+                    enemy.x += Math.cos(angle) * enemy.speed;
+                    enemy.y += Math.sin(angle) * enemy.speed;
+                }
             });
 
-            // Enviar o estado atualizado para todos os jogadores na sala específica
+            // Envia o estado para todos na sala
             io.to(roomName).emit('gameState', room);
 
         } else {
-            // Se a sala está vazia, deleta para economizar recursos
             console.log(`Deletando sala vazia: ${roomName}`);
             delete rooms[roomName];
         }
     }
-}, 1000/60); // Loop mais rápido para movimento suave do inimigo
+}, 1000/60);
 
 
 io.on('connection', (socket) => {
@@ -122,7 +139,7 @@ io.on('connection', (socket) => {
     socket.on('joinMultiplayer', (playerData) => {
         const roomName = findOrCreateRoom();
         socket.join(roomName);
-        socket.room = roomName; // Armazena a sala no objeto do socket
+        socket.room = roomName;
 
         const room = rooms[roomName];
         room.players[socket.id] = {
@@ -130,7 +147,6 @@ io.on('connection', (socket) => {
             ...playerData
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
-        // Não emite mais 'playerJoined', pois 'gameState' já envia tudo
     });
 
     socket.on('playerUpdate', (data) => {
@@ -141,7 +157,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerShoot', (bulletData) => {
-        // Retransmite o evento de tiro para os outros jogadores na mesma sala
         socket.to(socket.room).emit('playerShot', bulletData);
     });
     
@@ -154,7 +169,6 @@ io.on('connection', (socket) => {
             enemy.hp -= damage;
             if (enemy.hp <= 0) {
                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
-                // Notifica todos os clientes na sala que o inimigo morreu
                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id });
             }
         }
@@ -164,12 +178,8 @@ io.on('connection', (socket) => {
         console.log('Jogador desconectado:', socket.id);
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
-            // Remove o jogador do estado do jogo na sala
             delete rooms[roomName].players[socket.id];
-            // Notifica outros jogadores na sala que este jogador saiu
             io.to(roomName).emit('playerLeft', socket.id);
-
-            // Se a sala ficar vazia, o loop principal a removerá.
             if (Object.keys(rooms[roomName].players).length === 0) {
                  console.log(`Sala ${roomName} está vazia, será removida.`);
             }
@@ -183,7 +193,6 @@ async function startServer() {
     try {
         await db.connect();
         server.listen(PORT, () => {
-            // Esta mensagem agora aparecerá nos logs da Render
             console.log(`Servidor rodando com sucesso na porta ${PORT}`);
         });
     } catch (err) {
