@@ -32,6 +32,7 @@
                 <span>EXP</span>
                 <div id="expBar"></div>
             </div>
+            <div id="waveInfo">Horda: 0</div>
         </div>
         
         <div id="gameControls">
@@ -41,14 +42,12 @@
 
         <div id="timer">Tempo: 0s</div>
 
-        <!-- Controles Touch (visíveis apenas em mobile) - ATUALIZADO COM JOYSTICKS -->
+        <!-- Controles Touch (ATUALIZADOS) -->
         <div id="touchControls">
-            <div id="moveJoystick" class="joystick-container">
-                <div id="moveJoystickKnob" class="joystick-knob"></div>
+            <div id="moveControlsContainer">
+                <button id="touchLeft" class="touch-move-btn">◀</button>
+                <button id="touchRight" class="touch-move-btn">▶</button>
             </div>
-            
-            <button id="touchJump" class="touch-btn">▲</button>
-            
             <div id="aimJoystick" class="joystick-container">
                 <div id="aimJoystickKnob" class="joystick-knob"></div>
             </div>
@@ -60,6 +59,7 @@
         <div class="modal-content">
             <h2>Fim de Jogo!</h2>
             <p>Seu tempo de sobrevivência: <span id="finalTime">0</span>s</p>
+            <p>Você chegou até a <span id="finalWave">Horda 1</span>.</p>
             <button id="restartBtn">Jogar Novamente</button>
             <button id="backToMenuBtn">Voltar ao Menu</button>
         </div>

@@ -47,10 +47,24 @@ app.post('/api/ranking', async (req, res) => {
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
-// ATUALIZADO: Dimensões lógicas do mapa em modo retrato (vertical)
 const LOGICAL_WIDTH = 900;
 const LOGICAL_HEIGHT = 1600;
-const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.65; // Linha onde os inimigos param
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.65;
+const GAME_TICK_RATE = 1000 / 60;
+
+// --- Configurações das Hordas e Chefe ---
+const WAVE_CONFIG = [
+    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 }, // Horda 1 (Vermelho)
+    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 }, // Horda 2 (Laranja)
+    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 }, // Horda 3 (Amarelo)
+    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 }, // Horda 4 (Azul)
+    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }  // Horda 5 (Roxo)
+];
+const BOSS_CONFIG = {
+    color: '#FFFFFF', hp: 5000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1000, width: 120, height: 120
+};
+const WAVE_INTERVAL_SECONDS = 20;
+const ENEMIES_PER_WAVE = [12, 18]; // Min, Max
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -62,10 +76,45 @@ function findOrCreateRoom() {
     rooms[newRoomName] = {
         players: {},
         enemies: [],
-        gameTime: 0
+        enemyProjectiles: [],
+        gameTime: 0,
+        wave: 0,
+        waveState: 'intermission', // intermission, spawning, active, boss_intro, boss_active
+        waveTimer: 5, // Inicia mais rápido a primeira horda
+        enemiesToSpawn: 0,
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
+}
+
+function spawnEnemy(room) {
+    const waveIndex = room.wave - 1;
+    const config = WAVE_CONFIG[waveIndex];
+    const enemy = {
+        id: `enemy_${Date.now()}_${Math.random()}`,
+        x: Math.random() * LOGICAL_WIDTH,
+        y: -50,
+        width: 40, height: 40,
+        ...config,
+        maxHp: config.hp,
+        lastShotTime: 0,
+        targetX: Math.random() * LOGICAL_WIDTH // Posição horizontal alvo na linha de defesa
+    };
+    room.enemies.push(enemy);
+}
+
+function spawnBoss(room) {
+    const boss = {
+        id: `boss_${Date.now()}`,
+        x: LOGICAL_WIDTH / 2 - BOSS_CONFIG.width / 2,
+        y: -BOSS_CONFIG.height,
+        ...BOSS_CONFIG,
+        maxHp: BOSS_CONFIG.hp,
+        lastShotTime: 0,
+        targetX: LOGICAL_WIDTH / 2
+    };
+    room.enemies.push(boss);
+    room.waveState = 'boss_active';
 }
 
 // Game loop do servidor: A fonte da verdade
@@ -74,63 +123,117 @@ setInterval(() => {
         const room = rooms[roomName];
         const playerList = Object.values(room.players);
 
-        if (playerList.length > 0) {
-            room.gameTime++;
-
-            // Lógica de spawn de inimigos
-            if (room.gameTime > 1 && room.gameTime % 4 === 0) {
-                const enemy = {
-                    id: `enemy_${Date.now()}_${Math.random()}`,
-                    x: Math.random() * LOGICAL_WIDTH,
-                    y: -50, // Nasce no topo, fora da tela
-                    hp: 100 + (room.gameTime * 0.75),
-                    speed: 1.25 + (room.gameTime * 0.005),
-                    damage: 15
-                };
-                room.enemies.push(enemy);
-            }
-            
-            // Atualiza posição dos inimigos (NOVA LÓGICA)
-            room.enemies.forEach(enemy => {
-                let targetX = LOGICAL_WIDTH / 2; // Padrão se não houver jogador
-                
-                // Encontra o jogador mais próximo para mirar
-                let closestPlayer = null;
-                let minDistance = Infinity;
-                playerList.forEach(player => {
-                    const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestPlayer = player;
-                    }
-                });
-
-                if (closestPlayer) {
-                    targetX = closestPlayer.x;
-                }
-
-                // Inimigos param na linha de defesa
-                if (enemy.y >= DEFENSE_LINE_Y) {
-                    // Já está na linha, apenas se move horizontalmente
-                    const angle = Math.atan2(0, targetX - enemy.x); // Angulo 0 para Y
-                    enemy.x += Math.cos(angle) * enemy.speed;
-                } else {
-                    // Move-se em direção ao alvo
-                    const angle = Math.atan2(DEFENSE_LINE_Y - enemy.y, targetX - enemy.x);
-                    enemy.x += Math.cos(angle) * enemy.speed;
-                    enemy.y += Math.sin(angle) * enemy.speed;
-                }
-            });
-
-            // Envia o estado para todos na sala
-            io.to(roomName).emit('gameState', room);
-
-        } else {
+        if (playerList.length === 0) {
             console.log(`Deletando sala vazia: ${roomName}`);
             delete rooms[roomName];
+            continue;
         }
+        
+        room.gameTime++;
+
+        // --- LÓGICA DAS HORDAS ---
+        if (room.gameTime > 1 && room.gameTime % 60 === 0) { // Checa a cada segundo
+            if (room.waveState === 'intermission') {
+                room.waveTimer--;
+                if (room.waveTimer <= 0) {
+                    if (room.wave < WAVE_CONFIG.length) {
+                        room.wave++;
+                        room.waveState = 'spawning';
+                        room.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0];
+                    } else { // Acabaram as hordas, prepara o chefe
+                        room.waveState = 'boss_intro';
+                        room.waveTimer = 5; // Tempo de espera para o chefe
+                    }
+                }
+            } else if (room.waveState === 'active' && room.enemies.length === 0) {
+                console.log(`Sala ${roomName} limpou a horda ${room.wave}`);
+                room.waveState = 'intermission';
+                room.waveTimer = WAVE_INTERVAL_SECONDS;
+            } else if (room.waveState === 'boss_intro') {
+                room.waveTimer--;
+                if (room.waveTimer <= 0) {
+                    spawnBoss(room);
+                }
+            }
+        }
+
+        if (room.waveState === 'spawning' && room.enemiesToSpawn > 0 && room.gameTime % 30 === 0) { // Spawna 1 a cada 0.5s
+            spawnEnemy(room);
+            room.enemiesToSpawn--;
+            if (room.enemiesToSpawn === 0) {
+                room.waveState = 'active';
+            }
+        }
+
+        // --- ATUALIZAÇÕES ---
+        // Inimigos
+        room.enemies.forEach(enemy => {
+            let targetPlayer = playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0];
+            if (targetPlayer) {
+                enemy.targetX = targetPlayer.x;
+            }
+
+            const defenseY = DEFENSE_LINE_Y - (enemy.isBoss ? enemy.height : 0);
+            if (enemy.y < defenseY) {
+                const angle = Math.atan2(defenseY - enemy.y, enemy.targetX - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+            } else {
+                enemy.y = defenseY;
+                const moveDirection = Math.sign(enemy.targetX - enemy.x);
+                const intendedX = enemy.x + moveDirection * enemy.speed;
+                
+                // Prevenção de sobreposição simples
+                let canMove = true;
+                for (const other of room.enemies) {
+                    if (enemy.id !== other.id && Math.abs(intendedX - other.x) < (enemy.width / 2 + other.width / 2)) {
+                        canMove = false;
+                        break;
+                    }
+                }
+                if (canMove && intendedX > 0 && intendedX < LOGICAL_WIDTH - enemy.width) {
+                    enemy.x = intendedX;
+                }
+
+                // Disparar
+                const now = Date.now();
+                if (now > (enemy.lastShotTime || 0) + enemy.shootCooldown && targetPlayer) {
+                    enemy.lastShotTime = now;
+                    const angle = Math.atan2(targetPlayer.y - enemy.y, targetPlayer.x - enemy.x);
+                    room.enemyProjectiles.push({
+                        id: `ep_${now}_${Math.random()}`,
+                        x: enemy.x + enemy.width / 2,
+                        y: enemy.y + enemy.height,
+                        vx: Math.cos(angle) * 7,
+                        vy: Math.sin(angle) * 7,
+                        damage: enemy.projectileDamage,
+                        color: enemy.color
+                    });
+                }
+            }
+        });
+        
+        // Projéteis inimigos
+        room.enemyProjectiles.forEach((p, i) => {
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.y > LOGICAL_HEIGHT || p.x < 0 || p.x > LOGICAL_WIDTH) {
+                room.enemyProjectiles.splice(i, 1);
+            } else {
+                // Colisão projétil -> jogador
+                playerList.forEach(player => {
+                    if (p.x > player.x && p.x < player.x + 40 && p.y > player.y && p.y < player.y + 60) {
+                        // A colisão real será tratada no cliente para resposta imediata, mas o dano é confirmado aqui
+                        io.to(player.id).emit('playerHit', p.damage);
+                        room.enemyProjectiles.splice(i, 1);
+                    }
+                });
+            }
+        });
+        
+        io.to(roomName).emit('gameState', room);
     }
-}, 1000/60);
+}, GAME_TICK_RATE);
 
 
 io.on('connection', (socket) => {
@@ -147,6 +250,7 @@ io.on('connection', (socket) => {
             ...playerData
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
+        socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
 
     socket.on('playerUpdate', (data) => {
@@ -157,7 +261,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerShoot', (bulletData) => {
-        socket.to(socket.room).emit('playerShot', bulletData);
+        if(socket.room) socket.to(socket.room).emit('playerShot', bulletData);
     });
     
     socket.on('enemyHit', ({ enemyId, damage }) => {
@@ -169,7 +273,8 @@ io.on('connection', (socket) => {
             enemy.hp -= damage;
             if (enemy.hp <= 0) {
                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
-                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id });
+                const expGain = enemy.isBoss ? 1000 : 50;
+                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
             }
         }
     });
