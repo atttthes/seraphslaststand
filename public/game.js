@@ -52,7 +52,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
+
+    // --- ATUALIZADO: Posições no Canvas ---
     const DEFENSE_LINE_Y_RATIO = 0.5;
+    const BOSS_LINE_Y_RATIO = 0.3;
+    const SNIPER_LINE_Y_VAL = 80;
+
 
     // --- CONFIGS DE HORDAS (espelhado do servidor) ---
     const WAVE_CONFIG = [
@@ -62,23 +67,30 @@ document.addEventListener('DOMContentLoaded', () => {
         { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
         { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
     ];
-    // --- CONFIG DO SNIPER (NOVO) ---
     const SNIPER_BASE_CONFIG = {
-        color: '#00FFFF', // Ciano para distinguir
-        hpMultiplier: 0.8, // Snipers têm menos vida
-        damageMultiplier: 0.5, // Dano de colisão baixo
-        projectileDamageMultiplier: 1.15, // Dano do projétil 15% maior
-        shootCooldownMultiplier: 1.30, // Dispara 30% mais devagar
-        width: 25,
-        height: 50,
-        isSniper: true,
-        speed: 0.5
+        color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
+        projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30,
+        width: 25, height: 50, isSniper: true,
+        speed: 1.0, horizontalSpeed: 0.5
     };
     const BOSS_CONFIG = {
-        color: '#FFFFFF', hp: 5000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1000, width: 120, height: 120, isBoss: true
+        color: '#FFFFFF', hp: 4000, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
     };
-    const WAVE_INTERVAL_TICKS = 20 * 60;
-    const ENEMIES_PER_WAVE = [12, 18];
+    const WAVE_INTERVAL_TICKS = 15 * 60; // 15 segundos
+    const ENEMIES_PER_WAVE = [10, 15];
+
+    // --- NOVO: Funções de escalonamento para SP ---
+    function getSPWaveConfig(wave) {
+        const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
+        const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1);
+        return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) };
+    }
+    function getSPBossConfig(wave) {
+        const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
+        return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
+    }
+
 
     // --- CLASSES DO JOGO ---
     class Player {
@@ -103,8 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         update() {
             this.draw(); this.y += this.velocityY;
-            if (keys.a.pressed && this.x > 0) this.x -= this.speed;
-            if (keys.d.pressed && this.x < canvas.width - this.width) this.x += this.speed;
+            if (keys.a.pressed) this.x -= this.speed;
+            if (keys.d.pressed) this.x += this.speed;
             
             if (this.x < 0) this.x = 0;
             if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
@@ -171,40 +183,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         update() {
-            // Lógica de IA para Single Player (ATUALIZADA com Snipers)
+            // Lógica de IA para Single Player (ATUALIZADA)
             if (!isMultiplayer) {
                 if (this.isSniper) {
-                    this.y = 20; // Fica fixo no topo
-                    // Movimento lento para mirar no jogador
-                    const moveDirection = Math.sign(player.x - this.x);
-                    if (Math.abs(player.x - this.x) > this.width) {
-                        this.x += moveDirection * this.speed;
+                    if (this.y < SNIPER_LINE_Y_VAL) {
+                        this.y += this.speed;
+                    } else {
+                        this.y = SNIPER_LINE_Y_VAL;
+                        const moveDirection = Math.sign(player.x - this.x);
+                        if (Math.abs(player.x - this.x) > this.horizontalSpeed * 5) {
+                            this.x += moveDirection * this.horizontalSpeed;
+                        }
                     }
-                    if (this.x < 0) this.x = 0;
-                    if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+                } else if (this.isBoss) {
+                     const bossLineY = canvas.height * BOSS_LINE_Y_RATIO;
+                     if (this.y < bossLineY) {
+                         this.y += this.speed;
+                     } else {
+                         this.y = bossLineY;
+                         const moveDirection = Math.sign(player.x - this.x);
+                         if (Math.abs(player.x - this.x) > this.horizontalSpeed) {
+                            this.x += moveDirection * this.horizontalSpeed;
+                         }
+                     }
                 } else {
-                    // Lógica para inimigos terrestres
                     const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
                     if (this.y < defenseLineY) {
                         this.y += this.speed;
-                        if (this.y > defenseLineY) this.y = defenseLineY;
                     } else {
                         this.y = defenseLineY;
                         const moveDirection = Math.sign(player.x - this.x);
                         if (moveDirection !== 0 && Math.abs(player.x - this.x) > this.speed) {
-                            const intendedX = this.x + moveDirection * this.speed;
-                            if (intendedX >= 0 && intendedX <= canvas.width - this.width) {
-                                let isBlocked = false;
-                                for (const other of enemies) {
-                                    if (this.id === other.id || other.y < defenseLineY) continue;
-                                    const willOverlap = (intendedX < other.x + other.width && intendedX + this.width > other.x);
-                                    if (willOverlap) { isBlocked = true; break; }
-                                }
-                                if (!isBlocked) { this.x = intendedX; }
-                            }
+                           this.x += moveDirection * this.speed;
                         }
                     }
                 }
+                if (this.x < 0) this.x = 0;
+                if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
             }
             this.draw();
         }
@@ -212,10 +227,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     class Projectile {
         constructor(x, y, angle, speed, damage, color, owner = 'player') {
+            this.id = `proj_${Date.now()}_${Math.random()}`; // ID para rastreamento
             this.x = x; this.y = y; this.radius = 5;
             this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
             this.damage = damage; this.owner = owner; this.color = color;
-            if (owner !== 'player') { // Projéteis inimigos são maiores
+            if (owner !== 'player') {
                 this.radius = 8;
             }
         }
@@ -286,7 +302,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isGameRunning) return;
             gameTime = state.gameTime;
             spState.wave = state.wave;
-            spState.waveState = state.waveState;
+            spState.waveState = state.waveState; // 'intermission' ou 'active'
+            spState.waveTimer = state.waveTimer * 60; // s para ticks
 
             const scaleX = canvas.width / logicalWidth;
             const scaleY = canvas.height / logicalHeight;
@@ -296,12 +313,24 @@ document.addEventListener('DOMContentLoaded', () => {
             enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
             state.enemies.forEach(eData => {
                 let enemy = enemies.find(e => e.id === eData.id);
-                const enemyConfig = { ...eData, x: eData.x * scaleX, y: eData.y * scaleY };
+                const enemyConfig = { ...eData, x: eData.x * scaleX, y: eData.y * scaleY, width: eData.width * scaleX, height: eData.height * scaleY};
                 if (enemy) { Object.assign(enemy, enemyConfig); } 
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
             // Sincroniza projéteis inimigos
-            enemyProjectiles = state.enemyProjectiles.map(p => ({ ...p, x: p.x * scaleX, y: p.y * scaleY, color: p.isSniper ? '#00FFFF' : p.color }));
+            const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id));
+            enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
+            state.enemyProjectiles.forEach(pData => {
+                let p = enemyProjectiles.find(ep => ep.id === pData.id);
+                if (!p) {
+                   const newProj = new Projectile(pData.x * scaleX, pData.y * scaleY, 0, 0, pData.damage, pData.color, 'enemy');
+                   newProj.id = pData.id;
+                   newProj.velocity.x = pData.vx * scaleX; // Escalar velocidade também
+                   newProj.velocity.y = pData.vy * scaleY;
+                   enemyProjectiles.push(newProj);
+                }
+            });
+
 
             // Sincroniza outros jogadores
             for(const id in state.players) {
@@ -343,94 +372,92 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function drawBackground() {
-        const groundY = canvas.height - 40;
-        const brickHeight = 20; const brickWidth = 60;
-        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, groundY, canvas.width, 40);
-        ctx.strokeStyle = NEON_GREEN; ctx.lineWidth = 1;
-        for (let y = groundY, i = 0; y < canvas.height; y += brickHeight, i++) {
-            const offsetX = (i % 2 === 0) ? 0 : brickWidth / 2;
-            for (let x = offsetX; x < canvas.width; x += brickWidth) {
-                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + brickHeight); ctx.stroke();
-            }
-        }
-        ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(canvas.width, groundY); ctx.stroke();
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = NEON_GREEN;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height * DEFENSE_LINE_Y_RATIO);
+        ctx.lineTo(canvas.width, canvas.height * DEFENSE_LINE_Y_RATIO);
+        ctx.setLineDash([15, 10]);
+        ctx.stroke();
+        ctx.setLineDash([]);
     }
 
+    // --- ATUALIZADO: Lógica de hordas infinitas para Single Player ---
     function updateSinglePlayerLogic() {
-        // Lógica de hordas
         if (spState.waveState === 'intermission') {
             spState.waveTimer--;
             if (spState.waveTimer <= 0) {
-                if (spState.wave < WAVE_CONFIG.length) {
-                    spState.wave++;
-                    spState.waveState = 'active';
-                    spState.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0];
-                    spState.spawnCooldown = 0;
+                spState.wave++;
+                spState.waveState = 'active';
+                const waveConfig = getSPWaveConfig(spState.wave);
 
-                    // *** NOVO: Spawn de Snipers a partir da horda 2 ***
-                    if (spState.wave >= 2) {
-                        const waveConf = WAVE_CONFIG[spState.wave - 1];
-                        const sniperCount = (spState.wave - 1) * 2;
-                        for (let i = 0; i < sniperCount; i++) {
-                            const sniperConfig = {
-                                ...SNIPER_BASE_CONFIG,
-                                id: `sniper_${Date.now()}_${Math.random()}`,
-                                x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width),
-                                y: 20,
-                                hp: waveConf.hp * SNIPER_BASE_CONFIG.hpMultiplier,
-                                damage: waveConf.damage * SNIPER_BASE_CONFIG.damageMultiplier,
-                                projectileDamage: waveConf.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier,
-                                shootCooldown: waveConf.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier
-                            };
-                            enemies.push(new Enemy(sniperConfig));
-                        }
+                // Inimigos normais
+                spState.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0] + spState.wave;
+                spState.spawnCooldown = 0;
+
+                // Snipers
+                if (spState.wave >= 2) {
+                    const sniperCount = Math.min(8, (spState.wave - 1) * 2);
+                    for (let i = 0; i < sniperCount; i++) {
+                        const sniperConfig = {
+                            ...SNIPER_BASE_CONFIG,
+                            id: `sniper_${Date.now()}_${Math.random()}`,
+                            x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width),
+                            y: -50,
+                            hp: waveConfig.hp * SNIPER_BASE_CONFIG.hpMultiplier,
+                            damage: waveConfig.damage * SNIPER_BASE_CONFIG.damageMultiplier,
+                            projectileDamage: waveConfig.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier,
+                            shootCooldown: waveConfig.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier
+                        };
+                        enemies.push(new Enemy(sniperConfig));
                     }
+                }
 
-                } else {
-                    spState.waveState = 'boss_intro';
-                    spState.waveTimer = 5 * 60;
+                // Chefes
+                if (spState.wave >= 5) {
+                    const bossCount = spState.wave - 4;
+                    for (let i = 0; i < bossCount; i++) {
+                        const bossConfig = {
+                            ...getSPBossConfig(spState.wave),
+                            id: `boss_${Date.now()}_${Math.random()}`,
+                            x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, // Espalha os chefes
+                            y: -BOSS_CONFIG.height,
+                        };
+                        enemies.push(new Enemy(bossConfig));
+                    }
                 }
             }
         } else if (spState.waveState === 'active' && enemies.length === 0 && spState.enemiesToSpawn === 0) {
             spState.waveState = 'intermission';
             spState.waveTimer = WAVE_INTERVAL_TICKS;
-        } else if (spState.waveState === 'boss_intro' && spState.waveTimer <= 0) {
-            const bossConfig = { ...BOSS_CONFIG, id: `boss_${Date.now()}`, x: canvas.width / 2 - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height };
-            enemies.push(new Enemy(bossConfig));
-            spState.waveState = 'boss_active';
-        } else if (spState.waveState === 'boss_intro') {
-            spState.waveTimer--;
         }
-        
+
         // Spawn de inimigos terrestres periódico
         if (spState.waveState === 'active' && spState.enemiesToSpawn > 0) {
             spState.spawnCooldown--;
             if (spState.spawnCooldown <= 0) {
-                const waveIndex = spState.wave - 1;
-                const config = WAVE_CONFIG[waveIndex];
+                const config = getSPWaveConfig(spState.wave);
                 const enemyConfig = { ...config, id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40 };
                 enemies.push(new Enemy(enemyConfig));
                 spState.enemiesToSpawn--;
-                spState.spawnCooldown = 180;
+                spState.spawnCooldown = 180 / (1 + spState.wave * 0.05);
             }
         }
 
-        // Disparos inimigos (ATUALIZADO com Snipers)
+        // Disparos inimigos
         enemies.forEach(enemy => {
             const now = Date.now();
             let canShoot = false;
-            if(enemy.isSniper) {
-                canShoot = true; // Snipers disparam do topo
-            } else {
-                // Inimigos terrestres disparam da linha de defesa
-                const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
-                if (enemy.y >= defenseLineY) canShoot = true;
-            }
+            if (enemy.isSniper) { canShoot = enemy.y >= SNIPER_LINE_Y_VAL; }
+            else if (enemy.isBoss) { canShoot = enemy.y >= canvas.height * BOSS_LINE_Y_RATIO; }
+            else { canShoot = enemy.y >= canvas.height * DEFENSE_LINE_Y_RATIO; }
 
             if (canShoot && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                 enemy.lastShotTime = now;
                 const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
-                const bulletColor = enemy.isSniper ? SNIPER_BASE_CONFIG.color : enemy.color;
+                const bulletColor = enemy.color;
                 enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, bulletColor, 'enemy'));
             }
         });
@@ -445,49 +472,47 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawBackground();
         
-        if (!isMultiplayer) updateSinglePlayerLogic();
-
-        player.update();
-        if (isMultiplayer && socket) {
+        if (!isMultiplayer) {
+            updateSinglePlayerLogic();
+        } else if (socket) {
             socket.emit('playerUpdate', { x: player.x / (canvas.width / logicalWidth), y: player.y / (canvas.height / logicalHeight), hp: player.hp, name: player.name });
         }
-        
+
+        player.update();
         handleAimingAndShooting();
         Object.values(otherPlayers).forEach(p => p.draw());
         
-        // Atualiza projéteis e remove os que saem da tela
         projectiles.forEach((p, i) => {
             p.update();
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
         });
         enemyProjectiles.forEach((p, i) => {
-            if(p.update) p.update();
-            else { // Objeto do servidor
-                p.x += (p.vx || 0); p.y += (p.vy || 0);
-                const proj = new Projectile(p.x, p.y, 0, 0, p.damage, p.color, 'enemy');
-                proj.draw();
-            }
+            p.update();
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) enemyProjectiles.splice(i, 1);
         });
 
-        // --- LÓGICA DE COLISÃO ---
+        // --- ATUALIZADO: LÓGICA DE COLISÃO ---
 
-        // *** NOVO: Colisão Projétil do Jogador vs Projétil Inimigo ***
+        // Projétil do Jogador vs Projétil Inimigo
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
-            if (p.owner !== 'player') continue; // Apenas o projétil do jogador local pode interceptar
+            if (p.owner !== 'player') continue;
 
             for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
                 const ep = enemyProjectiles[j];
                 if (checkCollision(p, ep)) {
-                    projectiles.splice(i, 1); // Destrói projétil do jogador
-                    enemyProjectiles.splice(j, 1); // Destrói projétil do inimigo
-                    break; // Sai do loop interno, pois o projétil do jogador já foi destruído
+                    // Notifica o servidor no modo multiplayer para deletar o projétil
+                    if (isMultiplayer && socket) {
+                        socket.emit('enemyProjectileDestroyed', ep.id);
+                    }
+                    projectiles.splice(i, 1);
+                    enemyProjectiles.splice(j, 1);
+                    break; 
                 }
             }
         }
 
-        // Colisão Projétil Inimigo vs Jogador
+        // Projétil Inimigo vs Jogador
         for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
             const p = enemyProjectiles[i];
             if (checkCollision(player, p)) {
@@ -497,12 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Colisões com Inimigos
-        enemies.forEach((enemy, enemyIndex) => {
+        enemies.forEach((enemy) => {
             enemy.update();
-            // Colisão Inimigo vs Jogador
             if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
 
-            // Colisão Projétil do Jogador vs Inimigo
             for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
                 const proj = projectiles[projIndex];
                 if(proj.owner === 'player' && checkCollision(proj, enemy)) {
@@ -511,8 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
-                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : 50); // EXP extra para Snipers
-                            // Usar timeout para remover com segurança de dentro do loop
+                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : 50);
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
                                 if (currentIndex !== -1) {
@@ -554,9 +576,11 @@ document.addEventListener('DOMContentLoaded', () => {
         hpBar.style.width = `${(player.hp / player.maxHp) * 100}%`;
         expBar.style.width = `${(player.exp / player.expToNextLevel) * 100}%`;
         timerDisplay.textContent = `Tempo: ${Math.floor(gameTime/60)}s`;
-        if (spState.waveState.includes('boss')) {
-            waveDisplay.textContent = "!!! CHEFE !!!";
-            waveDisplay.style.color = "red";
+        
+        if (spState.waveState === 'intermission') {
+            const timer = isMultiplayer ? Math.ceil(spState.waveTimer/60) : Math.ceil(spState.waveTimer / 60);
+            waveDisplay.textContent = `Próxima horda em ${timer}s`;
+            waveDisplay.style.color = "gold";
         } else {
             waveDisplay.textContent = `Horda: ${spState.wave}`;
             waveDisplay.style.color = "white";
@@ -567,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isGameOver) return;
         isGameOver = true; isGameRunning = false;
         finalTimeDisplay.textContent = Math.floor(gameTime/60);
-        finalWaveDisplay.textContent = spState.waveState.includes('boss') ? "Chefe Final" : `Horda ${spState.wave}`;
+        finalWaveDisplay.textContent = `${spState.wave}`;
         gameOverModal.style.display = 'flex';
         try {
             await fetch('/api/ranking', {
@@ -582,10 +606,10 @@ document.addEventListener('DOMContentLoaded', () => {
         isPaused = true; upgradeOptionsContainer.innerHTML = '';
         const allUpgrades = [
             { name: "Cadência Rápida", desc: "+25% velocidade de tiro", apply: p => p.shootCooldown *= 0.75 },
-            { name: "Bala Potente", desc: "+20% dano", apply: p => p.bulletDamage *= 1.2 },
-            { name: "Pele de Aço", desc: "+25 HP máximo", apply: p => p.maxHp += 25 },
+            { name: "Bala Potente", desc: "+20% dano", apply: p => p.bulletDamage = Math.ceil(p.bulletDamage * 1.2) },
+            { name: "Pele de Aço", desc: "+25 HP máximo", apply: p => { p.maxHp += 25; p.hp += 25; } },
             { name: "Velocista", desc: "+10% velocidade de mov.", apply: p => p.speed *= 1.1 },
-            { name: "Vida Extra", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5)},
+            { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5)},
         ];
         const options = [...allUpgrades].sort(() => 0.5 - Math.random()).slice(0, 3);
         options.forEach(upgrade => {
@@ -609,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (e.code) {
             case 'KeyA': case 'ArrowLeft': keys.a.pressed = true; break;
             case 'KeyD': case 'ArrowRight': keys.d.pressed = true; break;
-            case 'Space': case 'KeyW': case 'ArrowUp': player.jump(); break;
+            case 'Space': case 'KeyW': case 'ArrowUp': if(player) player.jump(); break;
         }
     });
     window.addEventListener('keyup', (e) => {
@@ -631,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const touch = e.touches[0];
             let x = touch.clientX - rect.left - rect.width / 2;
             let y = touch.clientY - rect.top - rect.height / 2;
-            const distance = Math.min(rect.width / 2, Math.hypot(x, y));
+            const distance = Math.min(rect.width / 4, Math.hypot(x, y));
             const angle = Math.atan2(y, x);
             state.active = true; state.angle = angle;
             knob.style.transform = `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px)`;
