@@ -46,13 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ESTADO DAS HORDAS (para single-player) ---
     let spState = {
-        wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0
+        wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0, spawnCooldown: 0
     };
 
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
-    const DEFENSE_LINE_Y_RATIO = 0.65;
+    const DEFENSE_LINE_Y_RATIO = 0.5; // ATUALIZADO
 
     // --- CONFIGS DE HORDAS (espelhado do servidor) ---
     const WAVE_CONFIG = [
@@ -159,16 +159,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         update() {
-            if (!isMultiplayer) { // Lógica de IA para Single Player
+            // Lógica de IA para Single Player (ATUALIZADA)
+            if (!isMultiplayer) { 
                 const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
                 if (this.y < defenseLineY) {
-                    const angle = Math.atan2(defenseLineY - this.y, player.x - this.x);
-                    this.x += Math.cos(angle) * this.speed;
-                    this.y += Math.sin(angle) * this.speed;
+                    this.y += this.speed;
+                    if (this.y > defenseLineY) this.y = defenseLineY;
                 } else {
                     this.y = defenseLineY;
                     const moveDirection = Math.sign(player.x - this.x);
-                    this.x += moveDirection * this.speed;
+                    if (moveDirection !== 0 && Math.abs(player.x - this.x) > this.speed) {
+                        const intendedX = this.x + moveDirection * this.speed;
+                        if (intendedX >= 0 && intendedX <= canvas.width - this.width) {
+                            let isBlocked = false;
+                            for (const other of enemies) {
+                                if (this.id === other.id || other.y < defenseLineY) continue;
+                                const willOverlap = (intendedX < other.x + other.width && intendedX + this.width > other.x);
+                                if (willOverlap) {
+                                    isBlocked = true;
+                                    break;
+                                }
+                            }
+                            if (!isBlocked) {
+                                this.x = intendedX;
+                            }
+                        }
+                    }
                 }
             }
             this.draw();
@@ -213,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeCanvas();
         player = new Player(canvas.width / 2, canvas.height - 100, 'white', playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; otherPlayers = {};
-        spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0 };
+        spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60, enemiesToSpawn: 0, spawnCooldown: 0 };
         updateUI(); gameOverModal.style.display = 'none';
         
         if (isMultiplayer) {
@@ -322,36 +338,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSinglePlayerLogic() {
-        spState.waveTimer--;
-        // Lógica de hordas
+        // Lógica de hordas (ATUALIZADA)
         if (spState.waveState === 'intermission') {
+            spState.waveTimer--;
             if (spState.waveTimer <= 0) {
                 if (spState.wave < WAVE_CONFIG.length) {
                     spState.wave++;
-                    spState.waveState = 'spawning';
+                    spState.waveState = 'active';
                     spState.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0];
+                    spState.spawnCooldown = 0;
                 } else {
                     spState.waveState = 'boss_intro';
                     spState.waveTimer = 5 * 60;
                 }
             }
-        } else if (spState.waveState === 'active' && enemies.length === 0) {
+        } else if (spState.waveState === 'active' && enemies.length === 0 && spState.enemiesToSpawn === 0) {
             spState.waveState = 'intermission';
             spState.waveTimer = WAVE_INTERVAL_TICKS;
         } else if (spState.waveState === 'boss_intro' && spState.waveTimer <= 0) {
             const bossConfig = { ...BOSS_CONFIG, id: `boss_${Date.now()}`, x: canvas.width / 2 - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height };
             enemies.push(new Enemy(bossConfig));
             spState.waveState = 'boss_active';
+        } else if (spState.waveState === 'boss_intro') {
+            spState.waveTimer--;
         }
         
-        // Spawn de inimigos
-        if (spState.waveState === 'spawning' && spState.enemiesToSpawn > 0 && gameTime % 30 === 0) {
-            const waveIndex = spState.wave - 1;
-            const config = WAVE_CONFIG[waveIndex];
-            const enemyConfig = { ...config, id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * canvas.width, y: -50, width: 40, height: 40 };
-            enemies.push(new Enemy(enemyConfig));
-            spState.enemiesToSpawn--;
-            if (spState.enemiesToSpawn === 0) spState.waveState = 'active';
+        // Spawn de inimigos periódico
+        if (spState.waveState === 'active' && spState.enemiesToSpawn > 0) {
+            spState.spawnCooldown--;
+            if (spState.spawnCooldown <= 0) {
+                const waveIndex = spState.wave - 1;
+                const config = WAVE_CONFIG[waveIndex];
+                const enemyConfig = { ...config, id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40 };
+                enemies.push(new Enemy(enemyConfig));
+                spState.enemiesToSpawn--;
+                spState.spawnCooldown = 180; // 3 segundos (60fps * 3s)
+            }
         }
 
         // Disparos inimigos
