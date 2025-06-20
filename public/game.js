@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
-    const DEFENSE_LINE_Y_RATIO = 0.5; // ATUALIZADO
+    const DEFENSE_LINE_Y_RATIO = 0.5;
 
     // --- CONFIGS DE HORDAS (espelhado do servidor) ---
     const WAVE_CONFIG = [
@@ -62,6 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
         { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
         { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
     ];
+    // --- CONFIG DO SNIPER (NOVO) ---
+    const SNIPER_BASE_CONFIG = {
+        color: '#00FFFF', // Ciano para distinguir
+        hpMultiplier: 0.8, // Snipers têm menos vida
+        damageMultiplier: 0.5, // Dano de colisão baixo
+        projectileDamageMultiplier: 1.15, // Dano do projétil 15% maior
+        shootCooldownMultiplier: 1.30, // Dispara 30% mais devagar
+        width: 25,
+        height: 50,
+        isSniper: true,
+        speed: 0.5
+    };
     const BOSS_CONFIG = {
         color: '#FFFFFF', hp: 5000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1000, width: 120, height: 120, isBoss: true
     };
@@ -159,29 +171,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         update() {
-            // Lógica de IA para Single Player (ATUALIZADA)
-            if (!isMultiplayer) { 
-                const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
-                if (this.y < defenseLineY) {
-                    this.y += this.speed;
-                    if (this.y > defenseLineY) this.y = defenseLineY;
-                } else {
-                    this.y = defenseLineY;
+            // Lógica de IA para Single Player (ATUALIZADA com Snipers)
+            if (!isMultiplayer) {
+                if (this.isSniper) {
+                    this.y = 20; // Fica fixo no topo
+                    // Movimento lento para mirar no jogador
                     const moveDirection = Math.sign(player.x - this.x);
-                    if (moveDirection !== 0 && Math.abs(player.x - this.x) > this.speed) {
-                        const intendedX = this.x + moveDirection * this.speed;
-                        if (intendedX >= 0 && intendedX <= canvas.width - this.width) {
-                            let isBlocked = false;
-                            for (const other of enemies) {
-                                if (this.id === other.id || other.y < defenseLineY) continue;
-                                const willOverlap = (intendedX < other.x + other.width && intendedX + this.width > other.x);
-                                if (willOverlap) {
-                                    isBlocked = true;
-                                    break;
+                    if (Math.abs(player.x - this.x) > this.width) {
+                        this.x += moveDirection * this.speed;
+                    }
+                    if (this.x < 0) this.x = 0;
+                    if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+                } else {
+                    // Lógica para inimigos terrestres
+                    const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
+                    if (this.y < defenseLineY) {
+                        this.y += this.speed;
+                        if (this.y > defenseLineY) this.y = defenseLineY;
+                    } else {
+                        this.y = defenseLineY;
+                        const moveDirection = Math.sign(player.x - this.x);
+                        if (moveDirection !== 0 && Math.abs(player.x - this.x) > this.speed) {
+                            const intendedX = this.x + moveDirection * this.speed;
+                            if (intendedX >= 0 && intendedX <= canvas.width - this.width) {
+                                let isBlocked = false;
+                                for (const other of enemies) {
+                                    if (this.id === other.id || other.y < defenseLineY) continue;
+                                    const willOverlap = (intendedX < other.x + other.width && intendedX + this.width > other.x);
+                                    if (willOverlap) { isBlocked = true; break; }
                                 }
-                            }
-                            if (!isBlocked) {
-                                this.x = intendedX;
+                                if (!isBlocked) { this.x = intendedX; }
                             }
                         }
                     }
@@ -282,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
             // Sincroniza projéteis inimigos
-            enemyProjectiles = state.enemyProjectiles.map(p => ({ ...p, x: p.x * scaleX, y: p.y * scaleY }));
+            enemyProjectiles = state.enemyProjectiles.map(p => ({ ...p, x: p.x * scaleX, y: p.y * scaleY, color: p.isSniper ? '#00FFFF' : p.color }));
 
             // Sincroniza outros jogadores
             for(const id in state.players) {
@@ -338,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSinglePlayerLogic() {
-        // Lógica de hordas (ATUALIZADA)
+        // Lógica de hordas
         if (spState.waveState === 'intermission') {
             spState.waveTimer--;
             if (spState.waveTimer <= 0) {
@@ -347,6 +366,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     spState.waveState = 'active';
                     spState.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0];
                     spState.spawnCooldown = 0;
+
+                    // *** NOVO: Spawn de Snipers a partir da horda 2 ***
+                    if (spState.wave >= 2) {
+                        const waveConf = WAVE_CONFIG[spState.wave - 1];
+                        const sniperCount = (spState.wave - 1) * 2;
+                        for (let i = 0; i < sniperCount; i++) {
+                            const sniperConfig = {
+                                ...SNIPER_BASE_CONFIG,
+                                id: `sniper_${Date.now()}_${Math.random()}`,
+                                x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width),
+                                y: 20,
+                                hp: waveConf.hp * SNIPER_BASE_CONFIG.hpMultiplier,
+                                damage: waveConf.damage * SNIPER_BASE_CONFIG.damageMultiplier,
+                                projectileDamage: waveConf.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier,
+                                shootCooldown: waveConf.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier
+                            };
+                            enemies.push(new Enemy(sniperConfig));
+                        }
+                    }
+
                 } else {
                     spState.waveState = 'boss_intro';
                     spState.waveTimer = 5 * 60;
@@ -363,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
             spState.waveTimer--;
         }
         
-        // Spawn de inimigos periódico
+        // Spawn de inimigos terrestres periódico
         if (spState.waveState === 'active' && spState.enemiesToSpawn > 0) {
             spState.spawnCooldown--;
             if (spState.spawnCooldown <= 0) {
@@ -372,17 +411,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 const enemyConfig = { ...config, id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40 };
                 enemies.push(new Enemy(enemyConfig));
                 spState.enemiesToSpawn--;
-                spState.spawnCooldown = 180; // 3 segundos (60fps * 3s)
+                spState.spawnCooldown = 180;
             }
         }
 
-        // Disparos inimigos
+        // Disparos inimigos (ATUALIZADO com Snipers)
         enemies.forEach(enemy => {
             const now = Date.now();
-            if (now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
+            let canShoot = false;
+            if(enemy.isSniper) {
+                canShoot = true; // Snipers disparam do topo
+            } else {
+                // Inimigos terrestres disparam da linha de defesa
+                const defenseLineY = canvas.height * DEFENSE_LINE_Y_RATIO;
+                if (enemy.y >= defenseLineY) canShoot = true;
+            }
+
+            if (canShoot && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                 enemy.lastShotTime = now;
                 const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
-                enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, enemy.color, 'enemy'));
+                const bulletColor = enemy.isSniper ? SNIPER_BASE_CONFIG.color : enemy.color;
+                enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, bulletColor, 'enemy'));
             }
         });
     }
@@ -406,41 +455,76 @@ document.addEventListener('DOMContentLoaded', () => {
         handleAimingAndShooting();
         Object.values(otherPlayers).forEach(p => p.draw());
         
+        // Atualiza projéteis e remove os que saem da tela
         projectiles.forEach((p, i) => {
             p.update();
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
         });
-        
         enemyProjectiles.forEach((p, i) => {
-            if(p.update) { // Se for objeto da classe
-                p.update();
-            } else { // Se for objeto do servidor
-                p.x += (p.vx || 0);
-                p.y += (p.vy || 0);
+            if(p.update) p.update();
+            else { // Objeto do servidor
+                p.x += (p.vx || 0); p.y += (p.vy || 0);
                 const proj = new Projectile(p.x, p.y, 0, 0, p.damage, p.color, 'enemy');
                 proj.draw();
             }
-            if (checkCollision(player, p)) player.takeDamage(p.damage);
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) enemyProjectiles.splice(i, 1);
         });
 
+        // --- LÓGICA DE COLISÃO ---
+
+        // *** NOVO: Colisão Projétil do Jogador vs Projétil Inimigo ***
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i];
+            if (p.owner !== 'player') continue; // Apenas o projétil do jogador local pode interceptar
+
+            for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
+                const ep = enemyProjectiles[j];
+                if (checkCollision(p, ep)) {
+                    projectiles.splice(i, 1); // Destrói projétil do jogador
+                    enemyProjectiles.splice(j, 1); // Destrói projétil do inimigo
+                    break; // Sai do loop interno, pois o projétil do jogador já foi destruído
+                }
+            }
+        }
+
+        // Colisão Projétil Inimigo vs Jogador
+        for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+            const p = enemyProjectiles[i];
+            if (checkCollision(player, p)) {
+                player.takeDamage(p.damage);
+                enemyProjectiles.splice(i, 1);
+            }
+        }
+
+        // Colisões com Inimigos
         enemies.forEach((enemy, enemyIndex) => {
             enemy.update();
+            // Colisão Inimigo vs Jogador
             if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
-            projectiles.forEach((proj, projIndex) => {
+
+            // Colisão Projétil do Jogador vs Inimigo
+            for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
+                const proj = projectiles[projIndex];
                 if(proj.owner === 'player' && checkCollision(proj, enemy)) {
                     if (isMultiplayer) {
                         socket.emit('enemyHit', { enemyId: enemy.id, damage: proj.damage });
                     } else {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
-                            const expGain = enemy.isBoss ? 1000 : 50;
-                            setTimeout(() => { enemies.splice(enemyIndex, 1); player.addExp(expGain); }, 0);
+                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : 50); // EXP extra para Snipers
+                            // Usar timeout para remover com segurança de dentro do loop
+                            setTimeout(() => {
+                                const currentIndex = enemies.findIndex(e => e.id === enemy.id);
+                                if (currentIndex !== -1) {
+                                    enemies.splice(currentIndex, 1); 
+                                    player.addExp(expGain);
+                                }
+                            }, 0);
                         }
                     }
                     projectiles.splice(projIndex, 1);
                 }
-            });
+            }
         });
         
         updateUI();
@@ -450,8 +534,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const r1 = obj1.radius || 0; const r2 = obj2.radius || 0;
         const w1 = obj1.width || 0; const h1 = obj1.height || 0;
         const w2 = obj2.width || 0; const h2 = obj2.height || 0;
-        return (obj1.x - r1 < obj2.x + (w2 || r2) && obj1.x + (w1 || r1) > obj2.x - r2 &&
-                obj1.y - r1 < obj2.y + (h2 || r2) && obj1.y + (h1 || r1) > obj2.y - r2);
+        
+        const obj1Left = obj1.x - r1;
+        const obj1Right = obj1.x + (w1 || r1);
+        const obj1Top = obj1.y - r1;
+        const obj1Bottom = obj1.y + (h1 || r1);
+
+        const obj2Left = obj2.x - r2;
+        const obj2Right = obj2.x + (w2 || r2);
+        const obj2Top = obj2.y - r2;
+        const obj2Bottom = obj2.y + (h2 || r2);
+
+        return (obj1Left < obj2Right && obj1Right > obj2Left &&
+                obj1Top < obj2Bottom && obj1Bottom > obj2Top);
     }
 
     function updateUI() {
@@ -545,12 +640,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.active = false; knob.style.transform = `translate(0px, 0px)`;
         }
 
-        // Joystick de mira
         aimJoystick.addEventListener('touchstart', (e) => handleJoystick(e, aimJoystick, aimJoystickKnob, aimStick), { passive: false });
         aimJoystick.addEventListener('touchmove', (e) => handleJoystick(e, aimJoystick, aimJoystickKnob, aimStick), { passive: false });
         aimJoystick.addEventListener('touchend', () => resetJoystick(aimJoystickKnob, aimStick));
         
-        // Botões de movimento
         const addTouchListener = (btn, key) => {
             btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key].pressed = true; }, { passive: false });
             btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key].pressed = false; });

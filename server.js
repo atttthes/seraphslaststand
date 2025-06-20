@@ -49,23 +49,23 @@ const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
 const LOGICAL_WIDTH = 900;
 const LOGICAL_HEIGHT = 1600;
-const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5; // ATUALIZADO: Linha de defesa no meio da tela
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5;
 const GAME_TICK_RATE = 1000 / 60;
-const ENEMY_SPAWN_INTERVAL_TICKS = 3 * (1000 / GAME_TICK_RATE); // 3 segundos
+const ENEMY_SPAWN_INTERVAL_TICKS = 3 * (1000 / GAME_TICK_RATE);
 
 // --- Configurações das Hordas e Chefe ---
 const WAVE_CONFIG = [
-    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 }, // Horda 1 (Vermelho)
-    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 }, // Horda 2 (Laranja)
-    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 }, // Horda 3 (Amarelo)
-    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 }, // Horda 4 (Azul)
-    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }  // Horda 5 (Roxo)
+    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 },
+    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 },
+    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 },
+    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
+    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
 ];
 const BOSS_CONFIG = {
     color: '#FFFFFF', hp: 5000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1000, width: 120, height: 120, isBoss: true
 };
 const WAVE_INTERVAL_SECONDS = 20;
-const ENEMIES_PER_WAVE = [12, 18]; // Min, Max
+const ENEMIES_PER_WAVE = [12, 18];
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -81,9 +81,9 @@ function findOrCreateRoom() {
         gameTime: 0,
         wave: 0,
         waveState: 'intermission', // intermission, active, boss_intro, boss_active
-        waveTimer: 5, // Inicia mais rápido a primeira horda
+        waveTimer: 5,
         enemiesToSpawn: 0,
-        spawnCooldown: 0, // ATUALIZADO: Cooldown para spawn periódico
+        spawnCooldown: 0,
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -100,9 +100,29 @@ function spawnEnemy(room) {
         ...config,
         maxHp: config.hp,
         lastShotTime: 0,
-        targetX: Math.random() * LOGICAL_WIDTH
     };
     room.enemies.push(enemy);
+}
+
+// *** NOVO: Função para spawnar Snipers ***
+function spawnSniper(room, waveIndex) {
+    const baseConfig = WAVE_CONFIG[waveIndex];
+    const sniper = {
+        id: `sniper_${Date.now()}_${Math.random()}`,
+        x: Math.random() * (LOGICAL_WIDTH - 25),
+        y: 20, // Posição no topo da tela
+        width: 25, height: 50, // Formato diferente
+        color: '#00FFFF', // Cor Ciano
+        hp: baseConfig.hp * 0.8, // Mais frágeis
+        speed: 0.5, // Movimento lateral lento
+        damage: baseConfig.damage * 0.5, // Dano de colisão baixo
+        projectileDamage: baseConfig.projectileDamage * 1.15, // Tiros 15% mais fortes
+        shootCooldown: baseConfig.shootCooldown * 1.30, // Atiram 30% mais devagar
+        isSniper: true,
+        maxHp: baseConfig.hp * 0.8,
+        lastShotTime: 0,
+    };
+    room.enemies.push(sniper);
 }
 
 function spawnBoss(room) {
@@ -113,7 +133,6 @@ function spawnBoss(room) {
         ...BOSS_CONFIG,
         maxHp: BOSS_CONFIG.hp,
         lastShotTime: 0,
-        targetX: LOGICAL_WIDTH / 2
     };
     room.enemies.push(boss);
     room.waveState = 'boss_active';
@@ -133,8 +152,8 @@ setInterval(() => {
         
         room.gameTime++;
 
-        // --- LÓGICA DAS HORDAS (ATUALIZADA) ---
-        if (room.gameTime > 1 && room.gameTime % 60 === 0) { // Checa a cada segundo
+        // --- LÓGICA DAS HORDAS (ATUALIZADA com Snipers) ---
+        if (room.gameTime > 1 && room.gameTime % 60 === 0) {
             if (room.waveState === 'intermission') {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
@@ -142,7 +161,15 @@ setInterval(() => {
                         room.wave++;
                         room.waveState = 'active';
                         room.enemiesToSpawn = Math.floor(Math.random() * (ENEMIES_PER_WAVE[1] - ENEMIES_PER_WAVE[0] + 1)) + ENEMIES_PER_WAVE[0];
-                        room.spawnCooldown = 0; // Spawna o primeiro inimigo imediatamente
+                        room.spawnCooldown = 0;
+                        
+                        // *** NOVO: Spawna snipers a partir da horda 2 ***
+                        if (room.wave >= 2) {
+                            const sniperCount = (room.wave - 1) * 2;
+                            for (let i = 0; i < sniperCount; i++) {
+                                spawnSniper(room, room.wave - 1);
+                            }
+                        }
                     } else { 
                         room.waveState = 'boss_intro';
                         room.waveTimer = 5; 
@@ -160,70 +187,71 @@ setInterval(() => {
             }
         }
         
-        // --- SPAWN PERIÓDICO (NOVO) ---
+        // SPAWN PERIÓDICO DE INIMIGOS TERRESTRES
         if (room.waveState === 'active' && room.enemiesToSpawn > 0) {
             room.spawnCooldown--;
             if (room.spawnCooldown <= 0) {
                 spawnEnemy(room);
                 room.enemiesToSpawn--;
-                room.spawnCooldown = ENEMY_SPAWN_INTERVAL_TICKS; // Reinicia o cooldown
+                room.spawnCooldown = ENEMY_SPAWN_INTERVAL_TICKS;
             }
         }
 
-        // --- ATUALIZAÇÕES ---
-        // Inimigos (LÓGICA DE MOVIMENTO ATUALIZADA)
+        // --- ATUALIZAÇÕES DOS INIMIGOS (IA ATUALIZADA) ---
         room.enemies.forEach(enemy => {
-            let targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0] : null;
-            if (targetPlayer) {
-                enemy.targetX = targetPlayer.x;
-            }
+            const targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0] : null;
+            let canShoot = false;
 
-            const defenseY = DEFENSE_LINE_Y - (enemy.isBoss ? enemy.height / 2 : 0);
-
-            // 1. Mover para baixo até a linha de defesa
-            if (enemy.y < defenseY) {
-                enemy.y += enemy.speed;
-                if (enemy.y > defenseY) enemy.y = defenseY;
-            } 
-            // 2. Na linha de defesa, mover horizontalmente
-            else {
-                enemy.y = defenseY;
-                const moveDirection = Math.sign(enemy.targetX - enemy.x);
-                
-                if (moveDirection !== 0 && Math.abs(enemy.targetX - enemy.x) > enemy.speed) {
-                    const intendedX = enemy.x + moveDirection * enemy.speed;
-
-                    // Bloquear movimento para fora da tela
-                    if (intendedX >= 0 && intendedX <= LOGICAL_WIDTH - enemy.width) {
-                        let isBlocked = false;
-                        // Checar colisão com outros inimigos na linha de defesa
-                        for (const other of room.enemies) {
-                            if (enemy.id === other.id || other.y < defenseY) continue;
-                            const willOverlap = (intendedX < other.x + other.width && intendedX + enemy.width > other.x);
-                            if (willOverlap) {
-                                isBlocked = true;
-                                break;
+            if (enemy.isSniper) {
+                enemy.y = 20; // Mantém no topo
+                if (targetPlayer) {
+                    const moveDirection = Math.sign(targetPlayer.x - enemy.x);
+                    if (Math.abs(targetPlayer.x - enemy.x) > enemy.speed * 5) {
+                        enemy.x += moveDirection * enemy.speed;
+                    }
+                }
+                canShoot = true; // Snipers podem atirar a qualquer momento
+            } else { // Inimigos terrestres ou chefe
+                const defenseY = enemy.isBoss ? (DEFENSE_LINE_Y - enemy.height / 2) : DEFENSE_LINE_Y;
+                if (enemy.y < defenseY) {
+                    enemy.y += enemy.speed;
+                    if (enemy.y > defenseY) enemy.y = defenseY;
+                } else {
+                    enemy.y = defenseY;
+                    canShoot = true; // Só podem atirar quando chegam na linha
+                    if (targetPlayer) {
+                         const moveDirection = Math.sign(targetPlayer.x - enemy.x);
+                        if (moveDirection !== 0 && Math.abs(targetPlayer.x - enemy.x) > enemy.speed) {
+                            const intendedX = enemy.x + moveDirection * enemy.speed;
+                            if (intendedX >= 0 && intendedX <= LOGICAL_WIDTH - enemy.width) {
+                                let isBlocked = false;
+                                for (const other of room.enemies) {
+                                    if (enemy.id === other.id || other.y < defenseY) continue;
+                                    const willOverlap = (intendedX < other.x + other.width && intendedX + enemy.width > other.x);
+                                    if (willOverlap) { isBlocked = true; break; }
+                                }
+                                if (!isBlocked) enemy.x = intendedX;
                             }
-                        }
-                        if (!isBlocked) {
-                            enemy.x = intendedX;
                         }
                     }
                 }
+            }
 
-                // Disparar
+            // Lógica de Disparo Comum
+            if (canShoot && targetPlayer) {
                 const now = Date.now();
-                if (now > (enemy.lastShotTime || 0) + enemy.shootCooldown && targetPlayer) {
+                if (now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                     enemy.lastShotTime = now;
-                    const angle = Math.atan2(targetPlayer.y - enemy.y, targetPlayer.x - enemy.x);
+                    const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (targetPlayer.x + 20) - (enemy.x + enemy.width / 2));
                     room.enemyProjectiles.push({
                         id: `ep_${now}_${Math.random()}`,
                         x: enemy.x + enemy.width / 2,
-                        y: enemy.y + enemy.height / 2, // Atirar do centro
+                        y: enemy.y + enemy.height / 2,
                         vx: Math.cos(angle) * 7,
                         vy: Math.sin(angle) * 7,
                         damage: enemy.projectileDamage,
-                        color: enemy.color
+                        color: enemy.color,
+                        isSniper: enemy.isSniper // Passa a informação para o cliente
                     });
                 }
             }
@@ -236,7 +264,6 @@ setInterval(() => {
             if (p.y > LOGICAL_HEIGHT || p.x < 0 || p.x > LOGICAL_WIDTH) {
                 room.enemyProjectiles.splice(i, 1);
             } else {
-                // Colisão projétil -> jogador
                 playerList.forEach(player => {
                     if (p.x > player.x && p.x < player.x + 40 && p.y > player.y && p.y < player.y + 60) {
                         io.to(player.id).emit('playerHit', p.damage);
@@ -260,10 +287,7 @@ io.on('connection', (socket) => {
         socket.room = roomName;
 
         const room = rooms[roomName];
-        room.players[socket.id] = {
-            id: socket.id,
-            ...playerData
-        };
+        room.players[socket.id] = { id: socket.id, ...playerData };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
@@ -288,7 +312,7 @@ io.on('connection', (socket) => {
             enemy.hp -= damage;
             if (enemy.hp <= 0) {
                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
-                const expGain = enemy.isBoss ? 1000 : 50;
+                const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : 50); // EXP extra para Snipers
                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
             }
         }
