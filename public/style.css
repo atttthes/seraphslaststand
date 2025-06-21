@@ -6,6 +6,7 @@
     --dark-bg: #000000;
     --dark-secondary: #0a0a0a;
     --main-font: 'VT323', monospace;
+    --neon-cyan: #00ffff;
 }
 
 body, html {
@@ -159,7 +160,7 @@ body, html {
     color: var(--dark-bg);
 }
 
-#hpBarContainer, #expBarContainer {
+#hpBarContainer, #expBarContainer, #shieldBarContainer {
     border: 2px solid var(--neon-green);
     padding: 5px;
     width: clamp(120px, 25vw, 180px);
@@ -167,16 +168,21 @@ body, html {
     background-color: rgba(0, 255, 127, 0.05);
     position: relative;
 }
-#hpBarContainer > span, #expBarContainer > span {
+#hpBarContainer > span, #expBarContainer > span, #shieldBarContainer > span {
     color: var(--neon-green);
     position: absolute;
     top: 50%;
     left: 5px;
     transform: translateY(-50%);
 }
-#hpBar, #expBar { height: 100%; transition: width 0.2s; }
+#hpBar, #expBar, #shieldBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
+
+#shieldBarContainer { border-color: var(--neon-cyan); background-color: rgba(0, 255, 255, 0.05); }
+#shieldBarContainer > span { color: var(--neon-cyan); }
+#shieldBar { background-color: var(--neon-cyan); width: 100%; }
+
 
 /* --- Botão de Habilidade --- */
 #abilityControls {
@@ -196,7 +202,8 @@ body, html {
     color: #FFF;
     font-size: 2.5em;
     cursor: pointer;
-    text-shadow: 0 0 10px #FFF, 0 0 20px #FFF;
+    /* Efeito de Lâmina Incandescente */
+    text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
     transition: all 0.3s;
 }
 

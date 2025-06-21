@@ -128,7 +128,8 @@ function findOrCreateRoom() {
         players: {}, enemies: [], enemyProjectiles: [],
         lightningStrikes: [], 
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
-        classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 }
+        classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 },
+        bladeHits: {} // Rastrear acertos da lâmina por jogador por horda
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -232,6 +233,7 @@ setInterval(() => {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
                     room.wave++; room.waveState = 'active';
+                    room.bladeHits = {}; // Limpa os registros de acertos da lâmina para a nova horda
                     io.to(roomName).emit('waveStart', room.wave);
                     const waveConfig = getWaveConfig(room.wave);
                     
@@ -306,8 +308,18 @@ setInterval(() => {
 
             if (!enemy.reachedPosition) {
                 if (enemy.y < targetY) { enemy.y += enemy.speed; } 
-                else { enemy.y = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; }
+                else { 
+                    enemy.y = targetY; 
+                    enemy.baseY = targetY;
+                    enemy.reachedPosition = true; 
+                    enemy.patrolOriginX = enemy.x; 
+                }
             } else {
+                 // Efeito de flutuação vertical
+                if (enemy.baseY) {
+                    const phase = enemy.id.charCodeAt(enemy.id.length - 1) || 0;
+                    enemy.y = enemy.baseY + Math.sin(room.gameTime * 0.05 + phase) * 5;
+                }
                 const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
                 if (targetPlayer && !enemy.isRicochet) {
                      const moveDirection = Math.sign(targetPlayer.x - enemy.x);
@@ -370,7 +382,7 @@ io.on('connection', (socket) => {
         room.players[socket.id] = { 
             id: socket.id, ...playerData, 
             hasAlly: false, allyCooldownWave: 0, hasLightning: false,
-            hasTotalReaction: false, totalReactionCooldownWave: 0
+            hasTotalReaction: false,
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -390,14 +402,11 @@ io.on('connection', (socket) => {
     socket.on('enemyHit', ({ enemyId, damage, isReflected }) => {
         const room = rooms[socket.room];
         if (!room) return;
-
-        // Validação anti-cheat para o dano refletido
-        if (isReflected) {
-            const player = room.players[socket.id];
-            if (!player || !player.hasTotalReaction || room.wave < player.totalReactionCooldownWave) {
-                console.log(`Tentativa de dano refletido inválida pelo jogador ${socket.id}`);
-                return;
-            }
+        const player = room.players[socket.id];
+        
+        if (isReflected && (!player || !player.hasTotalReaction)) {
+             console.log(`Tentativa de dano refletido inválida por ${player.name}`);
+             return;
         }
 
         const enemy = room.enemies.find(e => e.id === enemyId);
@@ -408,6 +417,33 @@ io.on('connection', (socket) => {
                 const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
             }
+        }
+    });
+    
+    socket.on('bladeHitEnemy', (enemyId) => {
+        const room = rooms[socket.room];
+        if (!room) return;
+        const player = room.players[socket.id];
+        const enemy = room.enemies.find(e => e.id === enemyId);
+
+        if (player && player.hasTotalReaction && enemy) {
+            // Verifica se o jogador já usou a lâmina nesta horda para evitar spam
+            if(room.bladeHits[socket.id]) return;
+            
+            enemy.hp -= 300;
+            if (enemy.hp <= 0) {
+                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
+                 const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
+            }
+        }
+    });
+    
+    // Marcar que o jogador usou a habilidade nesta horda
+    socket.on('playerUsedTotalReaction', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id] && room.players[socket.id].hasTotalReaction) {
+            room.bladeHits[socket.id] = true;
         }
     });
 
@@ -443,14 +479,6 @@ io.on('connection', (socket) => {
         const room = rooms[socket.room];
         if (room && room.players[socket.id]) {
             room.players[socket.id].hasTotalReaction = true;
-            room.players[socket.id].totalReactionCooldownWave = 0; // Pronta para usar
-        }
-    });
-
-    socket.on('playerUsedTotalReaction', () => {
-        const room = rooms[socket.room];
-        if (room && room.players[socket.id]) {
-            room.players[socket.id].totalReactionCooldownWave = room.wave + 4; // Cooldown de 3 hordas (a atual + 3)
         }
     });
 
@@ -459,6 +487,7 @@ io.on('connection', (socket) => {
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
             delete rooms[roomName].players[socket.id];
+            delete rooms[roomName].bladeHits[socket.id]; // Limpa registro de lâmina
             io.to(roomName).emit('playerLeft', socket.id);
             if (Object.keys(rooms[roomName].players).length === 0) {
                  console.log(`Sala ${roomName} está vazia, será removida.`);
