@@ -18,6 +18,7 @@ body, html {
     background-color: var(--dark-bg);
     font-family: var(--main-font);
     color: var(--neon-green);
+    /* Solução de Responsividade: Centraliza o container do jogo */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -45,7 +46,7 @@ body, html {
     gap: 15px;
     animation: floatAnimation 6s ease-in-out infinite;
     padding: 20px;
-    z-index: 1; /* Para ficar sobre o canvas de fundo */
+    z-index: 1; 
 }
 
 #mainMenu h1 {
@@ -79,24 +80,23 @@ body, html {
     transform: scale(1.08) translateY(-3px);
 }
 
-/* --- Container do Jogo Responsivo --- */
+/* --- Container do Jogo Responsivo (ATUALIZADO) --- */
 #gameContainer {
     position: relative;
     border: 2px solid var(--neon-green);
     box-shadow: 0 0 10px var(--neon-green) inset;
     
+    /* Mantém a proporção e limita o tamanho à janela */
     aspect-ratio: 9 / 16;
-    height: 100vh;
-    max-height: 100vh;
-    width: auto;
     max-width: 100vw;
+    max-height: 100vh;
 }
 
 #gameCanvas {
     display: block;
     width: 100%;
     height: 100%;
-    background-color: transparent; /* Alterado para transparente */
+    background-color: transparent;
 }
 
 /* UI do Jogo (REESTRUTURADA COM GRID) */
@@ -106,9 +106,9 @@ body, html {
     left: 0;
     width: 100%;
     box-sizing: border-box;
-    padding: 15px; /* Aumentado padding vertical */
+    padding: 15px;
     display: grid;
-    grid-template-columns: 1fr auto 1fr; /* Colunas para esquerda, centro, direita */
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 10px;
     z-index: 10;
@@ -123,23 +123,23 @@ body, html {
     flex-direction: column;
     gap: 10px;
     font-size: clamp(1em, 2.5vw, 1.2em);
-    justify-self: start; /* Alinha na esquerda da sua coluna do grid */
+    justify-self: start;
 }
 
 #timer {
     font-size: clamp(1.8em, 5vw, 2.2em);
     font-weight: bold;
     text-shadow: 0 0 8px var(--neon-green);
-    justify-self: center; /* Alinha no centro da sua coluna do grid */
+    justify-self: center;
 }
 
 #gameControls {
     display: flex;
-    flex-direction: column; /* Empilha para melhor alinhamento */
-    align-items: flex-end; /* Alinha items à direita */
+    flex-direction: column;
+    align-items: flex-end;
     gap: 10px;
     text-align: right;
-    justify-self: end; /* Alinha na direita da sua coluna do grid */
+    justify-self: end;
 }
 #waveInfo {
     color: white;
@@ -184,13 +184,17 @@ body, html {
 #shieldBar { background-color: var(--neon-cyan); width: 100%; }
 
 
-/* --- Botão de Habilidade --- */
+/* --- Botão de Habilidade e Pulo (ATUALIZADO) --- */
 #abilityControls {
     position: absolute;
-    bottom: 150px; /* Acima dos controles de movimento */
+    bottom: 150px;
     left: 20px;
     z-index: 50;
     pointer-events: all;
+    /* ATUALIZADO para acomodar múltiplos botões */
+    display: none; /* Controlado por media query */
+    flex-direction: row;
+    gap: 15px;
 }
 
 .ability-btn {
@@ -202,9 +206,11 @@ body, html {
     color: #FFF;
     font-size: 2.5em;
     cursor: pointer;
-    /* Efeito de Lâmina Incandescente */
     text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
     transition: all 0.3s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .ability-btn:not([disabled]):hover {
@@ -235,6 +241,11 @@ body, html {
         box-sizing: border-box;
         z-index: 50;
         pointer-events: none;
+    }
+    
+    /* Mostra o container de habilidades/pulo em dispositivos touch */
+    #abilityControls {
+        display: flex;
     }
 
     #moveControlsContainer {

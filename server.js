@@ -81,10 +81,11 @@ const SNIPER_CONFIG = {
 };
 const WAVE_INTERVAL_SECONDS = 10;
 
-// --- Função para escalar dificuldade ---
+// --- Função para escalar dificuldade (ATUALIZADA) ---
 function getScalingFactor(wave) {
     if (wave <= 1) return 1.0;
-    return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
+    // 5% de aumento por horda, limitado a 40%
+    return 1.0 + Math.min(0.40, (wave - 1) * 0.05);
 }
 
 function getWaveConfig(wave) {
@@ -197,8 +198,14 @@ function shootForEnemy(enemy, room, targetPlayer) {
     };
 
     if (enemy.isRicochet) {
+        // Lógica de ricochete para acertar o jogador (ATUALIZADA)
+        // Determina qual parede usar para o ricochete
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
+        
+        // Cria um "jogador virtual" refletido através da parede
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
+        
+        // Mira no jogador virtual para que o ricochete atinja o jogador real
         const angle = Math.atan2((targetPlayer.y + 30) - projectile.y, (virtualPlayerX + 20) - projectile.x);
         projectile.vx = Math.cos(angle) * 8;
         projectile.vy = Math.sin(angle) * 8;
@@ -405,7 +412,7 @@ io.on('connection', (socket) => {
         const player = room.players[socket.id];
         
         if (isReflected && (!player || !player.hasTotalReaction)) {
-             console.log(`Tentativa de dano refletido inválida por ${player.name}`);
+             console.log(`Tentativa de dano refletido inválida por ${player ? player.name : 'desconhecido'}`);
              return;
         }
 
@@ -430,7 +437,7 @@ io.on('connection', (socket) => {
             // Verifica se o jogador já usou a lâmina nesta horda para evitar spam
             if(room.bladeHits[socket.id]) return;
             
-            enemy.hp -= 300;
+            enemy.hp -= 150; // Dano da lâmina
             if (enemy.hp <= 0) {
                  room.enemies = room.enemies.filter(e => e.id !== enemyId);
                  const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));

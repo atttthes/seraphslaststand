@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const touchRightBtn = document.getElementById('touchRight');
     const aimJoystick = document.getElementById('aimJoystick');
     const aimJoystickKnob = document.getElementById('aimJoystickKnob');
+    const touchJumpBtn = document.getElementById('touchJumpBtn'); // Novo botão
 
     // --- ESTADO DO JOGO ---
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
@@ -43,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
     let logicalWidth = 900, logicalHeight = 1600; 
     let backgroundOrbs = [];
-    let reactionBlade = { active: false, x: 0, y: 0, width: 0, height: 15 };
+    let reactionBlade = { active: false, x: 0, y: 0, width: 0, height: 15, hitEnemies: [] };
     let reflectedProjectiles = [];
     
     const keys = { a: { pressed: false }, d: { pressed: false } };
@@ -93,10 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
-    // --- Funções de escalonamento para SP ---
+    // --- Funções de escalonamento para SP (ATUALIZADA) ---
     function getSPScalingFactor(wave) {
         if (wave <= 1) return 1.0;
-        return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
+        // 5% de aumento por horda, limitado a 40%
+        return 1.0 + Math.min(0.40, (wave - 1) * 0.05);
     }
     
     function getSPWaveConfig(wave) {
@@ -224,20 +226,24 @@ document.addEventListener('DOMContentLoaded', () => {
             this.name = name; this.x = x; this.y = y;
             this.width = 40; this.height = 60;
             this.velocityY = 0; this.speed = 5; this.jumpForce = 15; this.onGround = false;
-            this.maxHp = 100; this.hp = this.maxHp;
+            // ATRIBUTOS ATUALIZADOS
+            this.maxHp = 300; this.hp = this.maxHp;
+            this.shootCooldown = 180;
+            this.bulletDamage = 70;
+            
             this.isInvincible = false; this.invincibleTime = 500;
             this.exp = 0; this.level = 1; this.expToNextLevel = 100;
             this.rerolls = 1;
-            this.shootCooldown = 250; this.lastShootTime = 0;
-            this.bulletDamage = 60; this.bulletSpeed = 10;
+            this.lastShootTime = 0;
+            this.bulletSpeed = 10;
             this.cadenceUpgrades = 0; this.ally = null; this.allyCooldownWave = 0;
             this.hasLightning = false; this.nextLightningTime = 0;
             this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3; // Waves
             this.currentReactionCooldown = 0;
             
-            // Escudo Mágico
+            // Escudo Mágico (ATUALIZADO)
             this.shield = {
-                active: false, hp: 0, maxHp: 3000, radius: 70, auraFlicker: 0
+                active: false, hp: 0, maxHp: 2500, radius: 70, auraFlicker: 0
             };
         }
 
@@ -689,18 +695,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function shootForSPEnemy(enemy) {
         if (!player) return;
-        const projectile = {
-            damage: enemy.projectileDamage,
-            color: enemy.color,
-            originId: enemy.id,
-        };
 
-        const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
+        let angle;
         let speed = 5;
-        if(enemy.isSniper) speed = 7;
-        if(enemy.isRicochet) speed = 8;
-        
-        const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, projectile.damage, projectile.color, 'enemy', projectile.originId);
+
+        if (enemy.isRicochet) {
+            // Lógica de ricochete para acertar o jogador (CORRIGIDA)
+            const wallX = (player.x > enemy.x) ? canvas.width : 0;
+            const virtualPlayerX = (wallX === 0) ? -player.x : (2 * canvas.width - player.x);
+            angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2));
+            speed = 8;
+        } else {
+            angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
+            if (enemy.isSniper) speed = 7;
+        }
+
+        const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, 'enemy', enemy.id);
 
         if (enemy.isRicochet) {
             newProj.canRicochet = true; newProj.bouncesLeft = 1;
@@ -865,21 +875,43 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // --- LÓGICA DE COLISÃO ---
-        // Lâmina vs Projéteis Inimigos
+        // Lâmina vs Inimigos e Projéteis
         if (reactionBlade.active) {
+            // Lâmina vs Projéteis Inimigos
             for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
                 const ep = enemyProjectiles[i];
-                if (ep.x > reactionBlade.x && ep.x < reactionBlade.x + reactionBlade.width &&
-                    ep.y > reactionBlade.y - 20 && ep.y < reactionBlade.y + reactionBlade.height + 20) {
-                    
+                if (checkCollision(ep, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
                     const originEnemy = enemies.find(e => e.id === ep.originId);
                     if (originEnemy) {
                         const angle = Math.atan2(originEnemy.y - ep.y, originEnemy.x - ep.x);
-                        const reflectedProj = new Projectile(ep.x, ep.y, angle, 15, ep.damage * 2, '#FFFFFF', 'reflected', originEnemy.id);
+                        // DANO REFLETIDO AUMENTADO PARA 300%
+                        const reflectedProj = new Projectile(ep.x, ep.y, angle, 15, ep.damage * 3, '#FFFFFF', 'reflected', originEnemy.id);
                         reflectedProjectiles.push(reflectedProj);
                     }
                     if (isMultiplayer) socket.emit('enemyProjectileDestroyed', ep.id);
                     enemyProjectiles.splice(i, 1);
+                }
+            }
+
+            // Lâmina vs Inimigos (NOVO)
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                // Checa se o inimigo já foi atingido por esta lâmina
+                if (!reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
+                    reactionBlade.hitEnemies.push(enemy.id); // Marca como atingido
+                    if (isMultiplayer) {
+                        socket.emit('bladeHitEnemy', enemy.id);
+                    } else {
+                        enemy.hp -= 150; // Dano da lâmina no SP
+                        if (enemy.hp <= 0) {
+                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                            setTimeout(() => {
+                                const currentIndex = enemies.findIndex(e => e.id === enemy.id);
+                                if (currentIndex !== -1) enemies.splice(currentIndex, 1);
+                                player.addExp(expGain);
+                            }, 0);
+                        }
+                    }
                 }
             }
         }
@@ -993,6 +1025,14 @@ document.addEventListener('DOMContentLoaded', () => {
             waveDisplay.textContent = `Horda: ${spState.wave}`;
             waveDisplay.style.color = "white";
         }
+        
+        // Lógica de visibilidade dos botões touch
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isTouchDevice) {
+            touchJumpBtn.style.display = 'block';
+        } else {
+            touchJumpBtn.style.display = 'none';
+        }
 
         if (player.hasTotalReaction) {
             totalReactionBtn.style.display = 'block';
@@ -1038,8 +1078,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
             { name: "Chame um Amigo", desc: "Cria um ajudante que atira.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => currentWave >= 4 && !p.ally && currentWave >= p.allyCooldownWave },
             { name: "Fúria dos Céus", desc: "A cada 9s, 3 raios caem do céu. Efeito permanente.", apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, available: p => currentWave >= 8 && !p.hasLightning },
-            { name: "Escudo Mágico", desc: "Cria um escudo com 3000 de vida. Renovar restaura-o.", apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 },
-            { name: "Reação Total", desc: "Habilidade ativa: reflete projéteis com 200% de dano. Cooldown: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction }
+            { name: "Escudo Mágico", desc: "Cria um escudo com 2500 de vida. Renovar restaura-o.", apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 },
+            { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (150 dano). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction }
         ];
 
         const availableOptions = allUpgrades.filter(upg => upg.available(player));
@@ -1080,6 +1120,8 @@ document.addEventListener('DOMContentLoaded', () => {
         aimJoystick.addEventListener('touchend', () => resetJoystick(aimJoystickKnob, aimStick));
         const addTouchListener = (btn, key) => { btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key].pressed = true; }, { passive: false }); btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key].pressed = false; }); };
         addTouchListener(touchLeftBtn, 'a'); addTouchListener(touchRightBtn, 'd');
+        // Listener para o novo botão de pulo
+        touchJumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (player) player.jump(); }, { passive: false });
     }
     setupTouchControls();
 
@@ -1100,7 +1142,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (player && player.totalReactionReady) {
             player.totalReactionReady = false;
             player.currentReactionCooldown = player.totalReactionCooldown + 1; // +1 for current wave
-            reactionBlade = { active: true, x: 0, y: player.y, width: player.width, height: 15 };
+            reactionBlade = { active: true, x: 0, y: player.y, width: player.width, height: 15, hitEnemies: [] };
             if (isMultiplayer) socket.emit('playerUsedTotalReaction');
             updateUI();
         }
