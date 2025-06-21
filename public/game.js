@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
     };
     const BOSS_CONFIG = {
-        color: '#FFFFFF', hp: 4000, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        color: '#FFFFFF', hp: 1600, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
         projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 15 * 60;
@@ -96,7 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function getSPBossConfig(wave) {
         const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
-        return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
+        // Aplica a redução base de 60% e depois escala
+        const baseHp = BOSS_CONFIG.hp; // Já está em 1600
+        return { ...BOSS_CONFIG, hp: Math.floor(baseHp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
     }
 
 
@@ -181,9 +183,39 @@ document.addEventListener('DOMContentLoaded', () => {
             this.cadenceUpgrades = 0;
             this.ally = null;
             this.allyCooldownWave = 0;
+            // Escudo Mágico
+            this.shield = {
+                active: false,
+                endTime: 0,
+                radius: 70, // Raio do escudo
+                auraFlicker: 0
+            };
+        }
+
+        drawShield() {
+            const centerX = this.x + this.width / 2;
+            const centerY = this.y + this.height / 2;
+
+            // Efeito de aura pulsante
+            this.shield.auraFlicker += 0.05;
+            const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
+            ctx.shadowColor = NEON_GREEN;
+            ctx.shadowBlur = auraSize;
+
+            // Cúpula do escudo
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, this.shield.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 255, 127, 0.6)'; // 60% de opacidade
+            ctx.fill();
+
+            // Reseta a sombra para não afetar outros desenhos
+            ctx.shadowBlur = 0;
         }
 
         draw() {
+            if (this.shield.active) {
+                this.drawShield();
+            }
             ctx.fillStyle = this.isInvincible ? 'rgba(255, 255, 255, 0.5)' : this.color;
             ctx.fillRect(this.x, this.y, this.width, this.height);
             ctx.fillStyle = 'white'; ctx.font = '20px VT323';
@@ -192,6 +224,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         update() {
+            // Checa a expiração do escudo
+            if (this.shield.active && Date.now() > this.shield.endTime) {
+                this.shield.active = false;
+            }
+            
             this.draw(); 
             if (this.ally) this.ally.update(enemies);
             this.y += this.velocityY;
@@ -512,9 +549,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Chefes
                 if (spState.wave >= 5 && (spState.wave - 5) % 2 === 0) {
                     const bossCount = Math.floor((spState.wave - 5) / 2) + 1;
+                    const bossConfigBase = getSPBossConfig(spState.wave);
                     for (let i = 0; i < bossCount; i++) {
                         const bossConfig = {
-                            ...getSPBossConfig(spState.wave), id: `boss_${Date.now()}_${i}`,
+                            ...bossConfigBase, id: `boss_${Date.now()}_${i}`,
                             x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height,
                         };
                         enemies.push(new Enemy(bossConfig));
@@ -536,7 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const targetX = (enemy.x < canvas.width / 2) ? canvas.width : 0;
                             const targetY = enemy.y + 300 + Math.random() * 200;
                             const baseAngle = Math.atan2(targetY - (enemy.y + enemy.height / 2), targetX - (enemy.x + enemy.width / 2));
-                            const finalAngle = baseAngle + (Math.PI / 6);
+                            const finalAngle = baseAngle + (Math.PI / 6); // Atira para baixo, em direção à parede
                             const proj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, finalAngle, 8, enemy.projectileDamage, enemy.color, 'enemy');
                             proj.canRicochet = true; proj.bouncesLeft = 1;
                             enemyProjectiles.push(proj);
@@ -605,6 +643,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
             const p = enemyProjectiles[i];
+            
+            // Colisão com o Escudo Mágico
+            if (player.shield.active) {
+                const dx = p.x - (player.x + player.width / 2);
+                const dy = p.y - (player.y + player.height / 2);
+                const distance = Math.hypot(dx, dy);
+
+                if (distance < player.shield.radius + p.radius) {
+                    if (isMultiplayer && socket) {
+                        socket.emit('enemyProjectileDestroyed', p.id);
+                    }
+                    if (!isMultiplayer) { // Em SP, o cliente decide
+                        enemyProjectiles.splice(i, 1);
+                    }
+                    continue; // Projétil destruído, pular para o próximo
+                }
+            }
+
+            // Colisão com o Jogador ou Aliado
             if (checkCollision(player, p)) {
                 player.takeDamage(p.damage);
                 if (!isMultiplayer) enemyProjectiles.splice(i, 1);
@@ -698,7 +755,16 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Pele de Aço", desc: "+25 HP máximo", apply: p => { p.maxHp += 25; p.hp += 25; }, available: () => true },
             { name: "Velocista", desc: "+10% velocidade de mov.", apply: p => p.speed *= 1.1, available: () => true },
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
-            { name: "Chame um Amigo", desc: "Cria um ajudante que atira automaticamente.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => spState.wave >= 4 && !p.ally && spState.wave >= p.allyCooldownWave }
+            { name: "Chame um Amigo", desc: "Cria um ajudante que atira automaticamente.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => spState.wave >= 4 && !p.ally && spState.wave >= p.allyCooldownWave },
+            { 
+                name: "Escudo Mágico", 
+                desc: "Cria um escudo impenetrável por 10 segundos.", 
+                apply: p => { 
+                    p.shield.active = true; 
+                    p.shield.endTime = Date.now() + 10000; 
+                }, 
+                available: p => spState.wave >= 5 && !p.shield.active 
+            }
         ];
 
         const availableOptions = allUpgrades.filter(upg => upg.available(player));

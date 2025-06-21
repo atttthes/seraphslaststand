@@ -66,7 +66,7 @@ const WAVE_CONFIG = [
     { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
 ];
 const BOSS_CONFIG = {
-    color: '#FFFFFF', hp: 4000, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
+    color: '#FFFFFF', hp: 1600, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
 };
 const RICOCHET_CONFIG = { 
     color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
@@ -81,7 +81,8 @@ function getWaveConfig(wave) {
 }
 function getBossConfig(wave) {
     const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
-    return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
+    const baseHp = BOSS_CONFIG.hp; // Usa o HP já reduzido (1600) como base
+    return { ...BOSS_CONFIG, hp: Math.floor(baseHp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
 }
 function getRicochetConfig(wave) {
     const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.12);
@@ -239,6 +240,7 @@ setInterval(() => {
                     for (let i = 0; i < 2; i++) { // Dispara duas vezes
                         setTimeout(() => {
                             if (!rooms[roomName]) return;
+                            // Atira na parede oposta à sua posição para garantir o ricochete
                             const targetX = (enemy.x < LOGICAL_WIDTH / 2) ? LOGICAL_WIDTH : 0;
                             const targetY = enemy.y + 300 + Math.random() * 200;
                             const baseAngle = Math.atan2(targetY - (enemy.y + enemy.height / 2), targetX - (enemy.x + enemy.width / 2));
