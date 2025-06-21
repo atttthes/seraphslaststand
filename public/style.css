@@ -99,7 +99,7 @@ body, html {
     
     /* Proporção 16:9, centralizado e responsivo */
     aspect-ratio: 16 / 9;
-    width: auto;
+    width: 100%; /* << CORREÇÃO APLICADA */
     height: auto;
     max-width: 95vw;
     max-height: 80vh; /* Deixa espaço para controles abaixo */

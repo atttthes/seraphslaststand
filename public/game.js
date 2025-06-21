@@ -487,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startGame(multiplayer) {
+        // CORREÇÃO APLICADA: Pega o nome do jogador do input no momento de iniciar
         playerName = playerNameInput.value || "Anônimo";
         isMultiplayer = multiplayer;
         mainMenu.style.display = 'none';
@@ -1089,19 +1090,31 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             totalReactionBtn.style.display = 'none';
         }
+        
+        // CORREÇÃO APLICADA: Lógica para mostrar a barra de escudo
+        const shieldBarContainer = document.getElementById('shieldBarContainer');
+        if (player.shield.active && player.shield.maxHp > 0) {
+            shieldBarContainer.style.display = 'block';
+            const shieldBar = document.getElementById('shieldBar');
+            shieldBar.style.width = `${(player.shield.hp / player.shield.maxHp) * 100}%`;
+        } else {
+            shieldBarContainer.style.display = 'none';
+        }
     }
     
     async function endGame() {
         if (isGameOver) return;
         isGameOver = true; isGameRunning = false;
-        finalTimeDisplay.textContent = Math.floor(gameTime/60);
+        // CORREÇÃO APLICADA: Cálculo e envio do tempo em segundos
+        const finalTimeInSeconds = Math.floor(gameTime / 60);
+        finalTimeDisplay.textContent = finalTimeInSeconds;
         finalWaveDisplay.textContent = `${spState.wave}`;
         gameOverModal.style.display = 'flex';
         try {
             await fetch('/api/ranking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: playerName, timeSurvived: Math.floor(gameTime/60) })
+                body: JSON.stringify({ name: playerName, timeSurvived: finalTimeInSeconds })
             });
         } catch (error) { console.error("Falha ao salvar pontuação:", error); }
     }

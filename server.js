@@ -493,6 +493,7 @@ io.on('connection', (socket) => {
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
             delete rooms[roomName].players[socket.id];
+            // CORREÇÃO APLICADA: Limpa dados de 'bladeHits' ao desconectar
             if(rooms[roomName].bladeHits) {
                 delete rooms[roomName].bladeHits[socket.id];
             }
