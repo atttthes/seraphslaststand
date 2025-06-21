@@ -98,6 +98,7 @@ function findOrCreateRoom() {
     const newRoomName = `room_${Date.now()}`;
     rooms[newRoomName] = {
         players: {}, enemies: [], enemyProjectiles: [],
+        lightningStrikes: [], // Para o novo item Raio
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
     };
     console.log(`Nova sala criada: ${newRoomName}`);
@@ -201,6 +202,54 @@ setInterval(() => {
                 room.waveTimer = WAVE_INTERVAL_SECONDS;
             }
         }
+        
+        // --- LÓGICA DO RAIO ---
+        const LIGHTNING_INTERVAL_TICKS = Math.round(7 * (1000 / GAME_TICK_RATE));
+        const LIGHTNING_DAMAGE = WAVE_CONFIG[0].hp; // 120
+        const LIGHTNING_VISUAL_DURATION_TICKS = 30; // 0.5s
+
+        // Remove raios antigos (apenas o efeito visual)
+        room.lightningStrikes = room.lightningStrikes.filter(strike => 
+            room.gameTime < strike.creationTime + LIGHTNING_VISUAL_DURATION_TICKS
+        );
+        
+        // Gera novos raios
+        if (room.gameTime > 1 && room.gameTime % LIGHTNING_INTERVAL_TICKS === 0) {
+            const lightningPlayers = playerList.filter(p => p.hasLightning);
+            lightningPlayers.forEach(player => {
+                for (let i = 0; i < 3; i++) {
+                    const strikeX = Math.random() * LOGICAL_WIDTH;
+                    const strikeWidth = 40 * 1.2; // Largura do player (40) * 1.2
+
+                    // Adiciona o objeto do raio para os clientes renderizarem
+                    room.lightningStrikes.push({
+                        id: `strike_${Date.now()}_${Math.random()}`,
+                        x: strikeX,
+                        width: strikeWidth,
+                        creationTime: room.gameTime,
+                    });
+
+                    // Aplica o dano instantaneamente nos inimigos na trajetória
+                    room.enemies.forEach(enemy => {
+                        // Checa colisão simples no eixo X
+                        if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) {
+                            enemy.hp -= LIGHTNING_DAMAGE;
+                        }
+                    });
+                }
+
+                // Após todos os raios de um jogador caírem, checa por inimigos mortos
+                room.enemies = room.enemies.filter(enemy => {
+                    if (enemy.hp <= 0) {
+                        const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                        io.to(room.name).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain });
+                        return false; // Remove o inimigo da lista
+                    }
+                    return true;
+                });
+            });
+        }
+
 
         // IA DOS INIMIGOS
         room.enemies.forEach(enemy => {
@@ -308,7 +357,13 @@ io.on('connection', (socket) => {
         socket.room = roomName;
 
         const room = rooms[roomName];
-        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, allyCooldownWave: 0 };
+        room.players[socket.id] = { 
+            id: socket.id, 
+            ...playerData, 
+            hasAlly: false, 
+            allyCooldownWave: 0,
+            hasLightning: false // Estado do Raio
+        };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
@@ -358,6 +413,17 @@ io.on('connection', (socket) => {
         if (room && room.players[socket.id]) {
             room.players[socket.id].hasAlly = false;
             room.players[socket.id].allyCooldownWave = room.wave + 2;
+        }
+    });
+    
+    socket.on('playerGotLightning', () => {
+        const room = rooms[socket.room];
+        if (!room || !room.players[socket.id]) return;
+
+        const lightningPlayerCount = Object.values(room.players).filter(p => p.hasLightning).length;
+        if (lightningPlayerCount < 2) {
+            room.players[socket.id].hasLightning = true;
+            console.log(`Jogador ${socket.id} ativou o upgrade Raio. Total na sala: ${lightningPlayerCount + 1}`);
         }
     });
 

@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO DO JOGO ---
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
     let gameTime = 0, animationFrameId, socket, playerName = "Jogador";
-    let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [];
+    let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
     let logicalWidth = 900, logicalHeight = 1600; 
     
     const keys = { a: { pressed: false }, d: { pressed: false } };
@@ -183,6 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.cadenceUpgrades = 0;
             this.ally = null;
             this.allyCooldownWave = 0;
+            this.hasLightning = false;
+            this.nextLightningTime = 0;
             // Escudo Mágico
             this.shield = {
                 active: false,
@@ -367,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cleanup(); isGameOver = false; gameTime = 0;
         resizeCanvas();
         player = new Player(canvas.width / 2, canvas.height - 100, 'white', playerName);
-        projectiles = []; enemies = []; enemyProjectiles = []; otherPlayers = {};
+        projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
         spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60 };
         updateUI(); gameOverModal.style.display = 'none';
         
@@ -421,6 +423,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
 
+            // Sincroniza Raios
+            lightningStrikes = state.lightningStrikes;
+
             const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id));
             enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
             state.enemyProjectiles.forEach(pData => {
@@ -443,6 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (id === socket.id) {
                     if(state.players[id].hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!state.players[id].hasAlly && player.ally) player.ally = null;
+                    if(state.players[id].hasLightning) player.hasLightning = true;
                     continue;
                 }
                 const pData = state.players[id];
@@ -456,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (!pData.hasAlly && otherPlayers[id].ally) {
                     otherPlayers[id].ally = null;
                 }
+                if (pData.hasLightning) otherPlayers[id].hasLightning = true;
             }
         });
 
@@ -500,13 +507,78 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function drawLightning(x, width) {
+        ctx.save();
+        ctx.shadowColor = '#8A2BE2'; // BlueViolet para um look de raio
+        ctx.shadowBlur = 25;
+    
+        for (let i = 0; i < 3; i++) { // 3 raios entrelaçados
+            ctx.beginPath();
+            const startX = x + (Math.random() - 0.5) * width;
+            ctx.moveTo(startX, 0);
+            let currentY = 0;
+            while (currentY < canvas.height) {
+                const nextY = currentY + Math.random() * 40 + 20;
+                ctx.lineTo(x + (Math.random() - 0.5) * width, nextY);
+                currentY = nextY;
+            }
+            ctx.strokeStyle = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`; // Branco com opacidade variada
+            ctx.lineWidth = Math.random() * 3 + 1;
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+    
     function drawBackground() {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawFloor();
     }
 
+    function updateSPLightning() {
+        // Remove raios antigos (efeito visual)
+        const visualDurationTicks = 30; // 0.5 segundos
+        lightningStrikes = lightningStrikes.filter(s => gameTime < s.creationTime + visualDurationTicks);
+    
+        if (player.hasLightning && gameTime >= player.nextLightningTime) {
+            player.nextLightningTime = gameTime + 7 * 60; // Próximo raio em 7 segundos (em ticks)
+            const lightningDamage = WAVE_CONFIG[0].hp; // 120
+    
+            for (let i = 0; i < 3; i++) {
+                const strikeX = Math.random() * canvas.width;
+                const strikeWidth = player.width * 1.2;
+    
+                // Adiciona para renderização
+                lightningStrikes.push({
+                   x: strikeX,
+                   width: strikeWidth,
+                   creationTime: gameTime,
+                });
+                
+                // Aplica dano aos inimigos
+                enemies.forEach(enemy => {
+                   if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) {
+                        enemy.hp -= lightningDamage;
+                   }
+                });
+            }
+            
+            // Filtra inimigos mortos pelo raio e dá EXP
+            enemies = enemies.filter(e => {
+                if (e.hp <= 0) {
+                    const expGain = e.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50));
+                    player.addExp(expGain);
+                    return false;
+                }
+                return true;
+            });
+        }
+    }
+    
+
     function updateSinglePlayerLogic() {
+        updateSPLightning();
+
         if (spState.waveState === 'intermission') {
             spState.waveTimer--;
             if (spState.waveTimer <= 0) {
@@ -607,6 +679,14 @@ document.addEventListener('DOMContentLoaded', () => {
         handleAimingAndShooting();
         Object.values(otherPlayers).forEach(p => p.draw());
         
+        // Renderiza os raios
+        const scaleX = canvas.width / logicalWidth;
+        lightningStrikes.forEach(strike => {
+            const strikeXPos = isMultiplayer ? strike.x * scaleX : strike.x;
+            const strikeWidth = isMultiplayer ? strike.width * scaleX : strike.width;
+            drawLightning(strikeXPos, strikeWidth);
+        });
+
         projectiles.forEach((p, i) => {
             p.update();
             if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
@@ -757,18 +837,24 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
             { name: "Chame um Amigo", desc: "Cria um ajudante que atira automaticamente.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => spState.wave >= 4 && !p.ally && spState.wave >= p.allyCooldownWave },
             { 
+                name: "Fúria dos Céus (Raio)", 
+                desc: "A cada 7s, 3 raios caem do céu, causando dano massivo. Efeito permanente.", 
+                apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, 
+                available: p => spState.wave >= 4 && !p.hasLightning
+            },
+            { 
                 name: "Escudo Mágico", 
-                desc: "Cria um escudo impenetrável por 10 segundos.", 
+                desc: "Cria um escudo impenetrável por 35 segundos.", 
                 apply: p => { 
                     p.shield.active = true; 
-                    p.shield.endTime = Date.now() + 10000; 
+                    p.shield.endTime = Date.now() + 35000; 
                 }, 
                 available: p => spState.wave >= 5 && !p.shield.active 
             }
         ];
 
         const availableOptions = allUpgrades.filter(upg => upg.available(player));
-        const options = [...availableOptions].sort(() => 0.5 - Math.random()).slice(0, 3);
+        const options = [...availableOptions].sort(() => 0.5 - Math.random()).slice(0, 4);
 
         options.forEach(upgrade => {
             const card = document.createElement('div'); card.className = 'upgrade-card';
