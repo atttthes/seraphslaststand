@@ -11,6 +11,7 @@
 </head>
 <body>
     <canvas id="backgroundCanvas"></canvas>
+
     <div id="mainMenu">
         <h1>Neon Outbreak</h1>
         <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
@@ -19,49 +20,58 @@
         <button id="showRankingBtn">🏆 Ver Ranking</button>
     </div>
 
-    <div id="gameContainer" style="display: none;">
-        <canvas id="gameCanvas"></canvas>
+    <!-- Wrapper para o Jogo e Controles Touch -->
+    <div id="app-wrapper" style="display: none;">
+        <div id="gameContainer">
+            <canvas id="gameCanvas"></canvas>
 
-        <!-- UI do Jogo (REESTRUTURADA) -->
-        <div id="topBar">
-            <div id="ui">
-                <div id="hpBarContainer">
-                    <span>HP</span>
-                    <div id="hpBar"></div>
+            <!-- UI do Jogo (Mantém a estrutura) -->
+            <div id="topBar">
+                <div id="ui">
+                    <div id="hpBarContainer">
+                        <span>HP</span>
+                        <div id="hpBar"></div>
+                    </div>
+                    <div id="expBarContainer">
+                        <span>EXP</span>
+                        <div id="expBar"></div>
+                    </div>
+                    <div id="shieldBarContainer" style="display: none;">
+                        <span>ESCUDO</span>
+                        <div id="shieldBar"></div>
+                    </div>
                 </div>
-                <div id="expBarContainer">
-                    <span>EXP</span>
-                    <div id="expBar"></div>
-                </div>
-                <div id="shieldBarContainer" style="display: none;">
-                    <span>ESCUDO</span>
-                    <div id="shieldBar"></div>
-                </div>
-            </div>
-            
-            <div id="timer">Tempo: 0s</div>
+                
+                <div id="timer">Tempo: 0s</div>
 
-            <div id="gameControls">
-                <div id="waveInfo">Horda: 0</div>
-                <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
-                <button id="quitBtn" title="Sair do Jogo">Sair</button>
+                <div id="gameControls">
+                    <div id="waveInfo">Horda: 0</div>
+                    <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
+                    <button id="quitBtn" title="Sair do Jogo">Sair</button>
+                </div>
             </div>
         </div>
 
-        <!-- Controles de Habilidade e Pulo para Mobile -->
-        <div id="abilityControls">
-             <button id="touchJumpBtn" class="ability-btn" style="display: none;" title="Pular">↑</button>
-            <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
-        </div>
-
-        <!-- Controles Touch -->
+        <!-- Controles Touch (Agora fora do gameContainer) -->
         <div id="touchControls">
-            <div id="moveControlsContainer">
-                <button id="touchLeft" class="touch-move-btn">◀</button>
-                <button id="touchRight" class="touch-move-btn">▶</button>
+            <!-- Controles de Movimento e Ações à Esquerda -->
+            <div id="left-controls">
+                <div id="moveControlsContainer">
+                    <button id="touchLeft" class="touch-move-btn">◀</button>
+                    <button id="touchRight" class="touch-move-btn">▶</button>
+                </div>
+                <!-- Botões de Habilidade/Pulo agrupados aqui -->
+                <div id="abilityControls">
+                    <button id="touchJumpBtn" class="ability-btn" title="Pular">↑</button>
+                    <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
+                </div>
             </div>
-            <div id="aimJoystick" class="joystick-container">
-                <div id="aimJoystickKnob" class="joystick-knob"></div>
+
+            <!-- Joystick de Mira à Direita -->
+            <div id="right-controls">
+                <div id="aimJoystick" class="joystick-container">
+                    <div id="aimJoystickKnob" class="joystick-knob"></div>
+                </div>
             </div>
         </div>
     </div>

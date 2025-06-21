@@ -2,6 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- ELEMENTOS DO DOM ---
     const mainMenu = document.getElementById('mainMenu');
+    const appWrapper = document.getElementById('app-wrapper'); // NOVO WRAPPER
     const gameContainer = document.getElementById('gameContainer');
     const backgroundCanvas = document.getElementById('backgroundCanvas');
     const bgCtx = backgroundCanvas.getContext('2d');
@@ -36,13 +37,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const touchRightBtn = document.getElementById('touchRight');
     const aimJoystick = document.getElementById('aimJoystick');
     const aimJoystickKnob = document.getElementById('aimJoystickKnob');
-    const touchJumpBtn = document.getElementById('touchJumpBtn'); // Novo botão
+    const touchJumpBtn = document.getElementById('touchJumpBtn');
 
     // --- ESTADO DO JOGO ---
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
     let gameTime = 0, animationFrameId, socket, playerName = "Jogador";
     let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
-    let logicalWidth = 900, logicalHeight = 1600; 
+    let logicalWidth = 1600, logicalHeight = 900; // ATUALIZADO para paisagem
     let backgroundOrbs = [];
     let reactionBlade = { active: false, x: 0, y: 0, width: 0, height: 15, hitEnemies: [] };
     let reflectedProjectiles = [];
@@ -57,20 +58,20 @@ document.addEventListener('DOMContentLoaded', () => {
         wave: 0, waveState: 'intermission', waveTimer: 5 * 60,
         classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 }
     };
-    const ENEMY_SHOOT_DELAY_TICKS = 18; // 0.3s
+    const ENEMY_SHOOT_DELAY_TICKS = 18;
 
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
-    const FLOOR_HEIGHT = 60;
+    const FLOOR_HEIGHT = 80; // Ajustado para nova proporção
 
-    // --- Posições no Canvas ---
+    // --- Posições no Canvas (Ratios aplicados a nova altura) ---
     const DEFENSE_LINE_Y_RATIO = 0.5;
     const BOSS_LINE_Y_RATIO = 0.3;
-    const RICOCHET_LINE_Y_RATIO = 0.1125;
-    const SNIPER_LINE_Y_VAL = 80;
+    const RICOCHET_LINE_Y_RATIO = 0.2; // 180 / 900
+    const SNIPER_LINE_Y_RATIO = 0.1;   // 90 / 900
 
-    // --- CONFIGS DE HORDAS ---
+    // --- CONFIGS DE HORDAS (Tamanhos atualizados) ---
     const WAVE_CONFIG = [
         { type: 'basic', color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
         { type: 'basic', color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
@@ -81,23 +82,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 25, height: 50, isSniper: true,
+        width: 40, height: 60, isSniper: true,
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
         type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 35, height: 35 
+        shootCooldown: 4200, isRicochet: true, width: 45, height: 45
     };
     const BOSS_CONFIG = {
         type: 'boss', color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true
+        projectileDamage: 35, shootCooldown: 1440, width: 150, height: 150, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
-    // --- Funções de escalonamento para SP (ATUALIZADA) ---
+    // --- Funções de escalonamento para SP ---
     function getSPScalingFactor(wave) {
         if (wave <= 1) return 1.0;
-        // 5% de aumento por horda, limitado a 40%
         return 1.0 + Math.min(0.40, (wave - 1) * 0.05);
     }
     
@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- FUNÇÃO DE DESENHO DO PERSONAGEM ---
+    // --- FUNÇÃO DE DESENHO DO PERSONAGEM (sem alterações) ---
     function drawTrashCan(x, y, width, height, color, aCtx = ctx) {
         aCtx.save();
         aCtx.strokeStyle = color;
@@ -145,7 +145,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const handleHeight = height * 0.1;
         const handleWidth = width * 0.4;
 
-        // Corpo da lata
         aCtx.beginPath();
         aCtx.moveTo(x, y + lidHeight);
         aCtx.lineTo(x + width, y + lidHeight);
@@ -154,10 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aCtx.closePath();
         aCtx.stroke();
 
-        // Tampa
         aCtx.strokeRect(x - (lidWidth - width) / 2, y, lidWidth, lidHeight);
-
-        // Alça da tampa
         aCtx.strokeRect(x + (width - handleWidth) / 2, y - handleHeight, handleWidth, handleHeight);
         
         aCtx.restore();
@@ -167,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     class Ally {
         constructor(owner) {
             this.owner = owner;
-            this.width = owner.width / 1.5; // Um pouco menor que o player
+            this.width = owner.width / 1.5;
             this.height = owner.height / 1.5;
             this.x = 0;
             this.y = 0;
@@ -224,9 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 40; this.height = 60;
-            this.velocityY = 0; this.speed = 5; this.jumpForce = 15; this.onGround = false;
-            // ATRIBUTOS ATUALIZADOS
+            this.width = 60; this.height = 60; // Tamanho atualizado
+            this.velocityY = 0; this.speed = 7; // Velocidade ajustada para tela maior
+            this.jumpForce = 15; this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
             this.shootCooldown = 180;
             this.bulletDamage = 70;
@@ -238,31 +234,28 @@ document.addEventListener('DOMContentLoaded', () => {
             this.bulletSpeed = 10;
             this.cadenceUpgrades = 0; this.ally = null; this.allyCooldownWave = 0;
             this.hasLightning = false; this.nextLightningTime = 0;
-            this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3; // Waves
+            this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3;
             this.currentReactionCooldown = 0;
             
-            // Escudo Mágico (ATUALIZADO)
             this.shield = {
-                active: false, hp: 0, maxHp: 2500, radius: 70, auraFlicker: 0
+                active: false, hp: 0, maxHp: 2500, radius: 80, // Raio do escudo ajustado
+                auraFlicker: 0
             };
         }
 
         drawShield() {
             const centerX = this.x + this.width / 2;
             const centerY = this.y + this.height / 2;
-
             this.shield.auraFlicker += 0.05;
             const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
             const shieldOpacity = 0.3 + 0.4 * (this.shield.hp / this.shield.maxHp);
             
             ctx.shadowColor = NEON_GREEN;
             ctx.shadowBlur = auraSize;
-
             ctx.beginPath();
             ctx.arc(centerX, centerY, this.shield.radius, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(0, 255, 127, ${shieldOpacity})`;
             ctx.fill();
-            
             ctx.shadowBlur = 0;
         }
 
@@ -365,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
         update() {
             if (!isMultiplayer) {
                 let targetY;
-                if (this.isSniper) targetY = SNIPER_LINE_Y_VAL;
+                if (this.isSniper) targetY = canvas.height * SNIPER_LINE_Y_RATIO;
                 else if (this.isRicochet) targetY = canvas.height * RICOCHET_LINE_Y_RATIO;
                 else if (this.isBoss) targetY = canvas.height * BOSS_LINE_Y_RATIO;
                 else targetY = canvas.height * DEFENSE_LINE_Y_RATIO;
@@ -445,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function returnToMenu() {
         cleanup();
         gameOverModal.style.display = 'none';
-        gameContainer.style.display = 'none';
+        appWrapper.style.display = 'none'; // Esconde o wrapper do jogo
         mainMenu.style.display = 'flex';
         totalReactionBtn.style.display = 'none';
         isGameRunning = false;
@@ -483,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         playerName = playerNameInput.value || "Anônimo";
         isMultiplayer = multiplayer;
         mainMenu.style.display = 'none';
-        gameContainer.style.display = 'block';
+        appWrapper.style.display = 'flex'; // Mostra o wrapper do jogo
         init(); isGameRunning = true; animate();
     }
 
@@ -534,11 +527,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!p) {
                    const newProj = new Projectile(pData.x * scaleX, pData.y * scaleY, 0, 0, pData.damage, pData.color, 'enemy', pData.originId);
                    newProj.id = pData.id;
-                   newProj.velocity.x = pData.vx; // Server velocities are not scaled
+                   newProj.velocity.x = pData.vx;
                    newProj.velocity.y = pData.vy;
                    enemyProjectiles.push(newProj);
                 } else {
-                   // Update existing projectile position from server
                    p.x = pData.x * scaleX;
                    p.y = pData.y * scaleY;
                 }
@@ -595,12 +587,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function drawFloor() {
-        const brickWidth = 40; const brickHeight = 20;
+        const brickWidth = 50; const brickHeight = 25;
         const startY = canvas.height - FLOOR_HEIGHT;
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(0, startY, canvas.width, FLOOR_HEIGHT);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
         for (let y = startY; y < canvas.height; y += brickHeight) {
             for (let x = (y / brickHeight) % 2 === 0 ? 0 : -brickWidth / 2; x < canvas.width; x += brickWidth) {
-                ctx.fillStyle = '#2a2a2a'; ctx.fillRect(x, y, brickWidth, brickHeight);
-                ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, brickWidth, brickHeight);
+                ctx.strokeRect(x, y, brickWidth, brickHeight);
             }
         }
     }
@@ -611,10 +606,15 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
         ctx.lineWidth = 1 + Math.random() * 4;
         ctx.beginPath();
-        ctx.moveTo(x + (Math.random() - 0.5) * width, 0);
-        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height * 0.4);
-        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height * 0.8);
-        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height);
+        let currentY = 0;
+        ctx.moveTo(x, currentY);
+        while(currentY < canvas.height) {
+            const nextY = currentY + Math.random() * 30 + 20;
+            const nextX = x + (Math.random() - 0.5) * width;
+            ctx.lineTo(nextX, nextY);
+            currentY = nextY;
+            x = nextX;
+        }
         ctx.stroke();
         ctx.restore();
     }
@@ -659,16 +659,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function drawGameBackground() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear game canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawFloor();
     }
 
     function updateSPLightning() {
-        const visualDurationTicks = 30; // 0.5s
+        const visualDurationTicks = 30;
         lightningStrikes = lightningStrikes.filter(s => gameTime < s.creationTime + visualDurationTicks);
     
         if (player.hasLightning && gameTime >= player.nextLightningTime) {
-            player.nextLightningTime = gameTime + 9 * 60; // Próximo raio em 9 segundos
+            player.nextLightningTime = gameTime + 9 * 60;
             const lightningDamage = WAVE_CONFIG[0].hp;
     
             for (let i = 0; i < 3; i++) {
@@ -700,7 +700,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let speed = 5;
 
         if (enemy.isRicochet) {
-            // Lógica de ricochete para acertar o jogador (CORRIGIDA)
             const wallX = (player.x > enemy.x) ? canvas.width : 0;
             const virtualPlayerX = (wallX === 0) ? -player.x : (2 * canvas.width - player.x);
             angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2));
@@ -736,7 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const waveConfig = getSPWaveConfig(spState.wave);
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
-                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: waveConfig.speed / 2 };
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 50), y: -50, width: 50, height: 50, horizontalSpeed: waveConfig.speed / 2 };
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
@@ -824,7 +823,6 @@ document.addEventListener('DOMContentLoaded', () => {
             for(let i=0; i<3; i++) drawLightning(strikeXPos, strikeWidth);
         });
 
-        // Update e draw da lâmina de reação
         if (reactionBlade.active) {
             reactionBlade.y -= 25;
             reactionBlade.width += 40;
@@ -875,16 +873,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // --- LÓGICA DE COLISÃO ---
-        // Lâmina vs Inimigos e Projéteis
         if (reactionBlade.active) {
-            // Lâmina vs Projéteis Inimigos
             for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
                 const ep = enemyProjectiles[i];
                 if (checkCollision(ep, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
                     const originEnemy = enemies.find(e => e.id === ep.originId);
                     if (originEnemy) {
                         const angle = Math.atan2(originEnemy.y - ep.y, originEnemy.x - ep.x);
-                        // DANO REFLETIDO AUMENTADO PARA 300%
                         const reflectedProj = new Projectile(ep.x, ep.y, angle, 15, ep.damage * 3, '#FFFFFF', 'reflected', originEnemy.id);
                         reflectedProjectiles.push(reflectedProj);
                     }
@@ -893,16 +888,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Lâmina vs Inimigos (NOVO)
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
-                // Checa se o inimigo já foi atingido por esta lâmina
                 if (!reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
-                    reactionBlade.hitEnemies.push(enemy.id); // Marca como atingido
+                    reactionBlade.hitEnemies.push(enemy.id);
                     if (isMultiplayer) {
                         socket.emit('bladeHitEnemy', enemy.id);
                     } else {
-                        enemy.hp -= 150; // Dano da lâmina no SP
+                        enemy.hp -= 150;
                         if (enemy.hp <= 0) {
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
@@ -916,7 +909,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Projéteis Refletidos vs Inimigos
         for (let i = reflectedProjectiles.length - 1; i >= 0; i--) {
             const rp = reflectedProjectiles[i];
             const target = enemies.find(e => e.id === rp.originId);
@@ -1026,16 +1018,8 @@ document.addEventListener('DOMContentLoaded', () => {
             waveDisplay.style.color = "white";
         }
         
-        // Lógica de visibilidade dos botões touch
-        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        if (isTouchDevice) {
-            touchJumpBtn.style.display = 'block';
-        } else {
-            touchJumpBtn.style.display = 'none';
-        }
-
         if (player.hasTotalReaction) {
-            totalReactionBtn.style.display = 'block';
+            totalReactionBtn.style.display = 'flex'; // 'flex' para alinhar ícone
             totalReactionBtn.disabled = !player.totalReactionReady;
             if(!player.totalReactionReady) {
                 totalReactionBtn.textContent = `${player.currentReactionCooldown}`;
@@ -1120,7 +1104,6 @@ document.addEventListener('DOMContentLoaded', () => {
         aimJoystick.addEventListener('touchend', () => resetJoystick(aimJoystickKnob, aimStick));
         const addTouchListener = (btn, key) => { btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key].pressed = true; }, { passive: false }); btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key].pressed = false; }); };
         addTouchListener(touchLeftBtn, 'a'); addTouchListener(touchRightBtn, 'd');
-        // Listener para o novo botão de pulo
         touchJumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (player) player.jump(); }, { passive: false });
     }
     setupTouchControls();
@@ -1141,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     totalReactionBtn.addEventListener('click', () => {
         if (player && player.totalReactionReady) {
             player.totalReactionReady = false;
-            player.currentReactionCooldown = player.totalReactionCooldown + 1; // +1 for current wave
+            player.currentReactionCooldown = player.totalReactionCooldown + 1;
             reactionBlade = { active: true, x: 0, y: player.y, width: player.width, height: 15, hitEnemies: [] };
             if (isMultiplayer) socket.emit('playerUsedTotalReaction');
             updateUI();
@@ -1163,7 +1146,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     closeRankingBtn.addEventListener('click', () => rankingModal.style.display = 'none');
 
-    // Iniciar animação de fundo
     initBackground();
     animateBackground();
 });
