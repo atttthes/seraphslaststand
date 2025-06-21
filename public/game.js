@@ -82,16 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 40, height: 60, isSniper: true,
+        width: 50, height: 70, isSniper: true, // TAMANHO ATUALIZADO
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
         type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 45, height: 45
+        shootCooldown: 4200, isRicochet: true, width: 55, height: 55 // TAMANHO ATUALIZADO
     };
     const BOSS_CONFIG = {
         type: 'boss', color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 150, height: 150, isBoss: true
+        projectileDamage: 35, shootCooldown: 1440, width: 180, height: 180, isBoss: true // TAMANHO ATUALIZADO
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 60; this.height = 60; // Tamanho atualizado
+            this.width = 60; this.height = 80; // TAMANHO ATUALIZADO para proporção
             this.velocityY = 0; this.speed = 7; // Velocidade ajustada para tela maior
             this.jumpForce = 15; this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.currentReactionCooldown = 0;
             
             this.shield = {
-                active: false, hp: 0, maxHp: 2500, radius: 80, // Raio do escudo ajustado
+                active: false, hp: 0, maxHp: 2500, radius: 80,
                 auraFlicker: 0
             };
         }
@@ -735,7 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const waveConfig = getSPWaveConfig(spState.wave);
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
-                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 50), y: -50, width: 50, height: 50, horizontalSpeed: waveConfig.speed / 2 };
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 60), y: -50, width: 60, height: 60, horizontalSpeed: waveConfig.speed / 2 }; // TAMANHO ATUALIZADO
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 

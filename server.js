@@ -72,13 +72,13 @@ const WAVE_CONFIG = [
     { type: 'basic', color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
 ];
 const BOSS_CONFIG = {
-    type: 'boss', color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 150, height: 150, isBoss: true
+    type: 'boss', color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 180, height: 180, isBoss: true // TAMANHO ATUALIZADO
 };
 const RICOCHET_CONFIG = { 
-    type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 45, height: 45
+    type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 55, height: 55 // TAMANHO ATUALIZADO
 };
 const SNIPER_CONFIG = {
-    type: 'sniper', color: '#00FFFF', speed: 1.0, horizontalSpeed: 0.5, isSniper: true, width: 40, height: 60
+    type: 'sniper', color: '#00FFFF', speed: 1.0, horizontalSpeed: 0.5, isSniper: true, width: 50, height: 70 // TAMANHO ATUALIZADO
 };
 const WAVE_INTERVAL_SECONDS = 10;
 
@@ -130,7 +130,7 @@ function findOrCreateRoom() {
         lightningStrikes: [], 
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
         classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 },
-        bladeHits: {}
+        bladeHits: {} // BUGFIX: Controla os acertos da lâmina por jogador
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -139,8 +139,8 @@ function findOrCreateRoom() {
 function spawnEnemy(room, waveConfig) {
     room.enemies.push({
         id: `enemy_${Date.now()}_${Math.random()}`,
-        x: Math.random() * (LOGICAL_WIDTH - 50), y: -50,
-        width: 50, height: 50, // Tamanho atualizado
+        x: Math.random() * (LOGICAL_WIDTH - 60), y: -50, // TAMANHO ATUALIZADO
+        width: 60, height: 60, // TAMANHO ATUALIZADO
         ...waveConfig, maxHp: waveConfig.hp,
         lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
         horizontalSpeed: waveConfig.speed / 2,
@@ -201,13 +201,13 @@ function shootForEnemy(enemy, room, targetPlayer) {
     if (enemy.isRicochet) {
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
-        const angle = Math.atan2((targetPlayer.y + 30) - projectile.y, (virtualPlayerX + 30) - projectile.x); // player width/2
+        const angle = Math.atan2((targetPlayer.y + 40) - projectile.y, (virtualPlayerX + 30) - projectile.x); // player height/2, width/2
         projectile.vx = Math.cos(angle) * 8;
         projectile.vy = Math.sin(angle) * 8;
         projectile.canRicochet = true;
         projectile.bouncesLeft = 1;
     } else {
-        const angle = Math.atan2((targetPlayer.y + 30) - projectile.y, (targetPlayer.x + 30) - projectile.x); // player width/2
+        const angle = Math.atan2((targetPlayer.y + 40) - projectile.y, (targetPlayer.x + 30) - projectile.x); // player height/2, width/2
         const speed = enemy.isSniper ? 7 : 5;
         projectile.vx = Math.cos(angle) * speed;
         projectile.vy = Math.sin(angle) * speed;
@@ -235,7 +235,7 @@ setInterval(() => {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
                     room.wave++; room.waveState = 'active';
-                    room.bladeHits = {}; 
+                    room.bladeHits = {}; // BUGFIX: Reseta os acertos da lâmina para a nova horda
                     io.to(roomName).emit('waveStart', room.wave);
                     const waveConfig = getWaveConfig(room.wave);
                     
@@ -359,7 +359,8 @@ setInterval(() => {
                 room.enemyProjectiles.splice(i, 1); continue;
             }
             for (const player of playerList) {
-                if (p.x > player.x && p.x < player.x + 60 && p.y > player.y && p.y < player.y + 60) { // Player size 60x60
+                // Player size: width 60, height 80
+                if (p.x > player.x && p.x < player.x + 60 && p.y > player.y && p.y < player.y + 80) {
                     io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1); break; 
                 }
@@ -421,28 +422,34 @@ io.on('connection', (socket) => {
         }
     });
     
+    // BUGFIX: Lógica da "Reação Total" corrigida
+    socket.on('playerUsedTotalReaction', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id] && room.players[socket.id].hasTotalReaction) {
+            // Prepara uma nova lista de inimigos atingidos para esta ativação da lâmina
+            room.bladeHits[socket.id] = [];
+        }
+    });
+
+    // BUGFIX: Lógica de dano da "Reação Total" corrigida
     socket.on('bladeHitEnemy', (enemyId) => {
         const room = rooms[socket.room];
         if (!room) return;
+        
         const player = room.players[socket.id];
         const enemy = room.enemies.find(e => e.id === enemyId);
 
-        if (player && player.hasTotalReaction && enemy) {
-            if(room.bladeHits[socket.id]) return;
+        // Verifica se o jogador pode usar a lâmina e se ainda não atingiu este inimigo nesta ativação
+        if (player && player.hasTotalReaction && enemy && room.bladeHits && Array.isArray(room.bladeHits[socket.id]) && !room.bladeHits[socket.id].includes(enemyId)) {
             
+            room.bladeHits[socket.id].push(enemyId); // Registra o acerto para não causar dano duplo
+
             enemy.hp -= 150; 
             if (enemy.hp <= 0) {
                  room.enemies = room.enemies.filter(e => e.id !== enemyId);
                  const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                  io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
             }
-        }
-    });
-    
-    socket.on('playerUsedTotalReaction', () => {
-        const room = rooms[socket.room];
-        if (room && room.players[socket.id] && room.players[socket.id].hasTotalReaction) {
-            room.bladeHits[socket.id] = true;
         }
     });
 
@@ -486,7 +493,9 @@ io.on('connection', (socket) => {
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
             delete rooms[roomName].players[socket.id];
-            delete rooms[roomName].bladeHits[socket.id];
+            if(rooms[roomName].bladeHits) {
+                delete rooms[roomName].bladeHits[socket.id];
+            }
             io.to(roomName).emit('playerLeft', socket.id);
             if (Object.keys(rooms[roomName].players).length === 0) {
                  console.log(`Sala ${roomName} está vazia, será removida.`);
