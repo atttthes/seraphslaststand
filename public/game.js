@@ -52,15 +52,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
-    const FLOOR_HEIGHT = 60; // Altura do novo chão de tijolos
+    const FLOOR_HEIGHT = 60;
 
     // --- Posições no Canvas ---
     const DEFENSE_LINE_Y_RATIO = 0.5;
     const BOSS_LINE_Y_RATIO = 0.3;
-    const RICOCHET_LINE_Y_RATIO = 0.1125; // 180 / 1600
+    const RICOCHET_LINE_Y_RATIO = 0.1125;
     const SNIPER_LINE_Y_VAL = 80;
 
-    // --- CONFIGS DE HORDAS (ATUALIZADO, espelhado do servidor) ---
+    // --- CONFIGS DE HORDAS ---
     const WAVE_CONFIG = [
         { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
         { color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
@@ -82,12 +82,11 @@ document.addEventListener('DOMContentLoaded', () => {
         color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
         projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true
     };
-    const WAVE_INTERVAL_TICKS = 10 * 60; // Reduzido para 10 segundos
+    const WAVE_INTERVAL_TICKS = 10 * 60;
 
     // --- Funções de escalonamento para SP ---
     function getSPScalingFactor(wave) {
         if (wave <= 1) return 1.0;
-        // Aumento de 10% por horda após a primeira, com um teto de 50% de bônus (atingido na horda 6)
         return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
     }
     
@@ -121,13 +120,44 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    // --- FUNÇÃO DE DESENHO DO PERSONAGEM ---
+    function drawTrashCan(x, y, width, height, color) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+        ctx.lineWidth = 3;
 
+        const bodyHeight = height * 0.85;
+        const lidHeight = height * 0.15;
+        const lidWidth = width * 1.1;
+        const handleHeight = height * 0.1;
+        const handleWidth = width * 0.4;
+
+        // Corpo da lata
+        ctx.beginPath();
+        ctx.moveTo(x, y + lidHeight);
+        ctx.lineTo(x + width, y + lidHeight);
+        ctx.lineTo(x + width * 0.9, y + height);
+        ctx.lineTo(x + width * 0.1, y + height);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Tampa
+        ctx.strokeRect(x - (lidWidth - width) / 2, y, lidWidth, lidHeight);
+
+        // Alça da tampa
+        ctx.strokeRect(x + (width - handleWidth) / 2, y - handleHeight, handleWidth, handleHeight);
+        
+        ctx.restore();
+    }
+    
     // --- CLASSES DO JOGO ---
     class Ally {
         constructor(owner) {
             this.owner = owner;
-            this.width = owner.width / 4;
-            this.height = owner.height / 4;
+            this.width = owner.width / 1.5; // Um pouco menor que o player
+            this.height = owner.height / 1.5;
             this.x = 0;
             this.y = 0;
             this.maxHp = owner.maxHp / 2;
@@ -137,38 +167,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         draw() {
-            ctx.fillStyle = this.isInvincible ? 'rgba(0, 255, 127, 0.4)' : NEON_GREEN;
-            ctx.fillRect(this.x, this.y, this.width, this.height);
+            const color = this.isInvincible ? 'rgba(255, 255, 255, 0.4)' : '#FFFFFF';
+            drawTrashCan(this.x, this.y, this.width, this.height, color);
         }
 
         update(enemyList) {
-            // Posiciona no ombro do jogador
-            this.x = this.owner.x - this.width - 5;
-            this.y = this.owner.y - this.height;
+            this.x = this.owner.x - this.width - 10;
+            this.y = this.owner.y;
 
-            // Encontra o inimigo mais próximo
             let nearestEnemy = null;
             let minDistance = Infinity;
             enemyList.forEach(enemy => {
                 const distance = Math.hypot(this.x - enemy.x, this.y - enemy.y);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestEnemy = enemy;
-                }
+                if (distance < minDistance) { minDistance = distance; nearestEnemy = enemy; }
             });
 
-            if (nearestEnemy) {
-                this.shoot(nearestEnemy);
-            }
+            if (nearestEnemy) this.shoot(nearestEnemy);
             this.draw();
         }
 
         shoot(target) {
             const now = Date.now();
-            if (now - this.lastShootTime > this.owner.shootCooldown * 1.5) { // Atira um pouco mais devagar que o jogador
+            if (now - this.lastShootTime > this.owner.shootCooldown * 1.5) {
                 this.lastShootTime = now;
                 const angle = Math.atan2((target.y + target.height / 2) - (this.y + this.height / 2), (target.x + target.width / 2) - (this.x + this.width / 2));
-                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, NEON_GREEN, 'player');
+                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
                 projectiles.push(bullet);
                 if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x / (canvas.width / logicalWidth), y: bullet.y / (canvas.height / logicalHeight), angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
             }
@@ -179,38 +202,33 @@ document.addEventListener('DOMContentLoaded', () => {
             this.hp -= damage;
             this.isInvincible = true;
             setTimeout(() => this.isInvincible = false, 500);
-
             if (this.hp <= 0) {
                 this.owner.ally = null;
-                this.owner.allyCooldownWave = spState.wave + 2;
+                this.owner.allyCooldownWave = (isMultiplayer ? spState.wave : spState.wave) + 2;
                 if(isMultiplayer) socket.emit('playerLostAlly');
             }
         }
     }
 
     class Player {
-        constructor(x, y, color = 'white', name = "Player") {
+        constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
             this.width = 40; this.height = 60;
-            this.color = color; this.velocityY = 0;
-            this.speed = 5; this.jumpForce = 15; this.onGround = false;
+            this.velocityY = 0; this.speed = 5; this.jumpForce = 15; this.onGround = false;
             this.maxHp = 100; this.hp = this.maxHp;
-            this.isInvincible = false;
+            this.isInvincible = false; this.invincibleTime = 500;
             this.exp = 0; this.level = 1; this.expToNextLevel = 100;
             this.shootCooldown = 250; this.lastShootTime = 0;
-            this.bulletDamage = 60; // Dano aumentado
-            this.bulletSpeed = 10;
-            // Upgrades
-            this.cadenceUpgrades = 0;
-            this.ally = null;
-            this.allyCooldownWave = 0;
-            this.hasLightning = false;
-            this.nextLightningTime = 0;
-            // Escudo Mágico
+            this.bulletDamage = 60; this.bulletSpeed = 10;
+            this.cadenceUpgrades = 0; this.ally = null; this.allyCooldownWave = 0;
+            this.hasLightning = false; this.nextLightningTime = 0;
+            
+            // Escudo Mágico (REWORK)
             this.shield = {
                 active: false,
-                endTime: 0,
-                radius: 70, // Raio do escudo
+                hp: 0,
+                maxHp: 3000,
+                radius: 70,
                 auraFlicker: 0
             };
         }
@@ -219,41 +237,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const centerX = this.x + this.width / 2;
             const centerY = this.y + this.height / 2;
 
-            // Efeito de aura pulsante
             this.shield.auraFlicker += 0.05;
             const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
+            const shieldOpacity = 0.3 + 0.4 * (this.shield.hp / this.shield.maxHp);
+            
             ctx.shadowColor = NEON_GREEN;
             ctx.shadowBlur = auraSize;
 
-            // Cúpula do escudo
             ctx.beginPath();
             ctx.arc(centerX, centerY, this.shield.radius, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0, 255, 127, 0.6)'; // 60% de opacidade
+            ctx.fillStyle = `rgba(0, 255, 127, ${shieldOpacity})`;
             ctx.fill();
-
-            // Reseta a sombra para não afetar outros desenhos
+            
             ctx.shadowBlur = 0;
         }
 
         draw() {
-            if (this.shield.active) {
-                this.drawShield();
-            }
-            ctx.fillStyle = this.isInvincible ? 'rgba(255, 255, 255, 0.5)' : this.color;
-            ctx.fillRect(this.x, this.y, this.width, this.height);
+            if (this.shield.active) this.drawShield();
+            
+            const color = this.isInvincible ? 'rgba(0, 255, 127, 0.5)' : NEON_GREEN;
+            drawTrashCan(this.x, this.y, this.width, this.height, color);
+
             ctx.fillStyle = 'white'; ctx.font = '20px VT323';
-            ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 10);
+            ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 15); // Ajustado para a alça
             if (this.ally) this.ally.draw();
         }
 
         update() {
-            // Checa a expiração do escudo
-            if (this.shield.active && Date.now() > this.shield.endTime) {
+            if (this.shield.active && this.shield.hp <= 0) {
                 this.shield.active = false;
             }
             
             this.draw(); 
             if (this.ally) this.ally.update(enemies);
+
             this.y += this.velocityY;
             if (keys.a.pressed) this.x -= this.speed;
             if (keys.d.pressed) this.x += this.speed;
@@ -286,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.hp -= damage;
             if (this.hp < 0) this.hp = 0;
             this.isInvincible = true;
-            setTimeout(() => this.isInvincible = false, 500);
+            setTimeout(() => this.isInvincible = false, this.invincibleTime);
             updateUI();
             if (this.hp <= 0 && !isGameOver) endGame();
         }
@@ -315,7 +332,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         draw() {
-            // Desenha o contorno neon
             ctx.save();
             ctx.strokeStyle = this.color;
             ctx.shadowColor = this.color;
@@ -324,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.strokeRect(this.x, this.y, this.width, this.height);
             ctx.restore();
 
-            // Barra de vida
             const hpRatio = this.hp / this.maxHp;
             ctx.fillStyle = '#555';
             ctx.fillRect(this.x, this.y - 10, this.width, 5);
@@ -368,15 +383,39 @@ document.addEventListener('DOMContentLoaded', () => {
             this.x = x; this.y = y; this.radius = 5;
             this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
             this.damage = damage; this.owner = owner; this.color = color;
+            this.trail = []; this.trailLength = 15;
             if (owner !== 'player') this.radius = 8;
         }
+
+        drawTrail() {
+            for (let i = 0; i < this.trail.length; i++) {
+                const pos = this.trail[i];
+                ctx.globalAlpha = (i / this.trail.length) * 0.5;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, this.radius * (i / this.trail.length), 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
         draw() {
+            this.drawTrail();
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             ctx.fillStyle = this.color;
             ctx.fill();
         }
-        update() { this.draw(); this.x += this.velocity.x; this.y += this.velocity.y; }
+
+        update() { 
+            this.trail.push({ x: this.x, y: this.y });
+            if (this.trail.length > this.trailLength) {
+                this.trail.shift();
+            }
+            this.x += this.velocity.x; 
+            this.y += this.velocity.y; 
+            this.draw();
+        }
     }
     
     // --- FUNÇÕES DO JOGO ---
@@ -397,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         cleanup(); isGameOver = false; gameTime = 0;
         resizeCanvas();
-        player = new Player(canvas.width / 2, canvas.height - 100, 'white', playerName);
+        player = new Player(canvas.width / 2, canvas.height - 100, playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
         spState = { wave: 0, waveState: 'intermission', waveTimer: WAVE_INTERVAL_TICKS };
         updateUI(); gameOverModal.style.display = 'none';
@@ -452,19 +491,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
 
-            // Sincroniza Raios
             lightningStrikes = state.lightningStrikes;
 
             const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id));
             enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
-                if (p) {
-                    p.x += (pData.x * scaleX - p.x) * 0.3; // Suaviza a posição
-                    p.y += (pData.y * scaleY - p.y) * 0.3;
-                    p.velocity.x = pData.vx * scaleX; // Sincroniza a velocidade para ricochetes
-                    p.velocity.y = pData.vy * scaleY;
-                } else {
+                if (!p) {
                    const newProj = new Projectile(pData.x * scaleX, pData.y * scaleY, 0, 0, pData.damage, pData.color, 'enemy');
                    newProj.id = pData.id;
                    newProj.velocity.x = pData.vx * scaleX;
@@ -482,15 +515,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const pData = state.players[id];
                 if(!otherPlayers[id]) {
-                    otherPlayers[id] = new Player(pData.x * scaleX, pData.y * scaleY, '#999999', pData.name);
+                    otherPlayers[id] = new Player(pData.x * scaleX, pData.y * scaleY, pData.name);
                 }
                 otherPlayers[id].x = pData.x * scaleX; otherPlayers[id].y = pData.y * scaleY;
                 otherPlayers[id].hp = pData.hp; otherPlayers[id].name = pData.name;
-                if (pData.hasAlly && !otherPlayers[id].ally) {
-                    otherPlayers[id].ally = new Ally(otherPlayers[id]);
-                } else if (!pData.hasAlly && otherPlayers[id].ally) {
-                    otherPlayers[id].ally = null;
-                }
+                if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } 
+                else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
                 if (pData.hasLightning) otherPlayers[id].hasLightning = true;
             }
         });
@@ -510,51 +540,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleAimingAndShooting() {
         let isAiming = false;
-        if (aimStick.active) {
-            isAiming = true;
-            aimAngle = aimStick.angle;
-        } else if (mouse.down) {
-            isAiming = true;
-            aimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
-        }
-
+        if (aimStick.active) { isAiming = true; aimAngle = aimStick.angle; } 
+        else if (mouse.down) { isAiming = true; aimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2)); }
         if (isAiming) player.shoot(aimAngle);
     }
     
     function drawFloor() {
-        const brickWidth = 40;
-        const brickHeight = 20;
+        const brickWidth = 40; const brickHeight = 20;
         const startY = canvas.height - FLOOR_HEIGHT;
-
         for (let y = startY; y < canvas.height; y += brickHeight) {
             for (let x = (y / brickHeight) % 2 === 0 ? 0 : -brickWidth / 2; x < canvas.width; x += brickWidth) {
-                ctx.fillStyle = '#2a2a2a'; // Cor do tijolo
-                ctx.fillRect(x, y, brickWidth, brickHeight);
-                ctx.strokeStyle = '#000'; // Cor da argamassa
-                ctx.strokeRect(x, y, brickWidth, brickHeight);
+                ctx.fillStyle = '#2a2a2a'; ctx.fillRect(x, y, brickWidth, brickHeight);
+                ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, brickWidth, brickHeight);
             }
         }
     }
 
     function drawLightning(x, width) {
         ctx.save();
-        ctx.shadowColor = '#8A2BE2'; // BlueViolet para um look de raio
-        ctx.shadowBlur = 25;
-    
-        for (let i = 0; i < 3; i++) { // 3 raios entrelaçados
-            ctx.beginPath();
-            const startX = x + (Math.random() - 0.5) * width;
-            ctx.moveTo(startX, 0);
-            let currentY = 0;
-            while (currentY < canvas.height) {
-                const nextY = currentY + Math.random() * 40 + 20;
-                ctx.lineTo(x + (Math.random() - 0.5) * width, nextY);
-                currentY = nextY;
-            }
-            ctx.strokeStyle = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`; // Branco com opacidade variada
-            ctx.lineWidth = Math.random() * 3 + 1;
-            ctx.stroke();
-        }
+        ctx.shadowColor = '#8A2BE2'; ctx.shadowBlur = 25;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
+        ctx.lineWidth = 1 + Math.random() * 4;
+        ctx.beginPath();
+        ctx.moveTo(x + (Math.random() - 0.5) * width, 0);
+        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height * 0.4);
+        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height * 0.8);
+        ctx.lineTo(x + (Math.random() - 0.5) * width, canvas.height);
+        ctx.stroke();
         ctx.restore();
     }
     
@@ -565,26 +577,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSPLightning() {
-        // Remove raios antigos (efeito visual)
-        const visualDurationTicks = 30; // 0.5 segundos
+        const visualDurationTicks = 30; // 0.5s
         lightningStrikes = lightningStrikes.filter(s => gameTime < s.creationTime + visualDurationTicks);
     
         if (player.hasLightning && gameTime >= player.nextLightningTime) {
-            player.nextLightningTime = gameTime + 7 * 60; // Próximo raio em 7 segundos (em ticks)
-            const lightningDamage = WAVE_CONFIG[0].hp; // 120
+            player.nextLightningTime = gameTime + 9 * 60; // Próximo raio em 9 segundos
+            const lightningDamage = WAVE_CONFIG[0].hp;
     
             for (let i = 0; i < 3; i++) {
                 const strikeX = Math.random() * canvas.width;
                 const strikeWidth = player.width * 1.2;
-    
-                // Adiciona para renderização
-                lightningStrikes.push({
-                   x: strikeX,
-                   width: strikeWidth,
-                   creationTime: gameTime,
-                });
-                
-                // Aplica dano aos inimigos
+                lightningStrikes.push({ x: strikeX, width: strikeWidth, creationTime: gameTime });
                 enemies.forEach(enemy => {
                    if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) {
                         enemy.hp -= lightningDamage;
@@ -592,7 +595,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
-            // Filtra inimigos mortos pelo raio e dá EXP
             enemies = enemies.filter(e => {
                 if (e.hp <= 0) {
                     const expGain = e.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50));
@@ -604,7 +606,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // LÓGICA DO SINGLE PLAYER ATUALIZADA
     function updateSinglePlayerLogic() {
         updateSPLightning();
 
@@ -614,14 +615,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 spState.wave++; spState.waveState = 'active';
                 const waveConfig = getSPWaveConfig(spState.wave);
 
-                // Inimigos Normais: Começa com 2, +1 a cada horda
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
                     const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: waveConfig.speed / 2 };
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
-                // Snipers: Mantém lógica original
                 if (spState.wave >= 3) {
                     const sniperCount = 1 + (spState.wave - 3) * 2;
                     for (let i = 0; i < sniperCount; i++) {
@@ -634,28 +633,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 
-                // Ricochets: A partir da horda 7, a cada 2 hordas
                 if (spState.wave >= 7 && (spState.wave - 7) % 2 === 0) {
                     const ricochetCount = Math.floor((spState.wave - 7) / 2) + 1;
                     const ricochetConfigBase = getSPRicochetConfig(spState.wave);
                     for (let i = 0; i < ricochetCount; i++) {
-                        const ricochetConfig = {
-                            ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`,
-                            x: Math.random() * (canvas.width - ricochetConfigBase.width), y: -50,
-                        };
+                        const ricochetConfig = { ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`, x: Math.random() * (canvas.width - ricochetConfigBase.width), y: -50 };
                         enemies.push(new Enemy(ricochetConfig));
                     }
                 }
 
-                // Chefes: A partir da horda 10, a cada 3 hordas
                 if (spState.wave >= 10 && (spState.wave - 10) % 3 === 0) {
                     const bossCount = Math.floor((spState.wave - 10) / 3) + 1;
                     const bossConfigBase = getSPBossConfig(spState.wave);
                     for (let i = 0; i < bossCount; i++) {
-                        const bossConfig = {
-                            ...bossConfigBase, id: `boss_${Date.now()}_${i}`,
-                            x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height,
-                        };
+                        const bossConfig = { ...bossConfigBase, id: `boss_${Date.now()}_${i}`, x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height };
                         enemies.push(new Enemy(bossConfig));
                     }
                 }
@@ -670,20 +661,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                 enemy.lastShotTime = now;
                 if (enemy.isRicochet) {
-                    // IA de Ricochete: Calcula o tiro na parede para acertar o jogador
                     const wallX = (player.x > enemy.x) ? canvas.width : 0;
                     const virtualPlayerX = (wallX === 0) ? -player.x : (2 * canvas.width - player.x);
-                    const virtualPlayerY = player.y;
-
-                    const angle = Math.atan2(
-                        (virtualPlayerY + player.height / 2) - (enemy.y + enemy.height / 2),
-                        (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2)
-                    );
-
+                    const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2));
                     const proj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 8, enemy.projectileDamage, enemy.color, 'enemy');
                     proj.canRicochet = true; proj.bouncesLeft = 1;
                     enemyProjectiles.push(proj);
-
                 } else {
                     const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
                     enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, enemy.color, 'enemy'));
@@ -701,45 +684,31 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawBackground();
         
-        // --- Auxílio de Mira (Rastro) ---
         const isAiming = (aimStick.active || mouse.down);
         if (!isPaused && isAiming && player) {
-            let currentAimAngle;
-            if (aimStick.active) {
-                currentAimAngle = aimStick.angle;
-            } else { // mouse.down
-                currentAimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
-            }
+            let currentAimAngle = aimStick.active ? aimStick.angle : Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
             ctx.save();
             ctx.beginPath();
             ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
-            // Projeta a linha para bem longe
-            ctx.lineTo(
-                player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000,
-                player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000
-            );
-            ctx.strokeStyle = 'rgba(0, 255, 127, 0.1)'; // 10% de opacidade
+            ctx.lineTo(player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000, player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000);
+            ctx.strokeStyle = 'rgba(0, 255, 127, 0.1)';
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.restore();
         }
 
-        if (!isMultiplayer) {
-            updateSinglePlayerLogic();
-        } else if (socket) {
-            socket.emit('playerUpdate', { x: player.x / (canvas.width / logicalWidth), y: player.y / (canvas.height / logicalHeight), hp: player.hp, name: player.name });
-        }
+        if (!isMultiplayer) updateSinglePlayerLogic();
+        else if (socket) socket.emit('playerUpdate', { x: player.x / (canvas.width / logicalWidth), y: player.y / (canvas.height / logicalHeight), hp: player.hp, name: player.name });
 
         player.update();
         handleAimingAndShooting();
         Object.values(otherPlayers).forEach(p => p.draw());
         
-        // Renderiza os raios
         const scaleX = canvas.width / logicalWidth;
         lightningStrikes.forEach(strike => {
             const strikeXPos = isMultiplayer ? strike.x * scaleX : strike.x;
             const strikeWidth = isMultiplayer ? strike.width * scaleX : strike.width;
-            drawLightning(strikeXPos, strikeWidth);
+            for(let i=0; i<3; i++) drawLightning(strikeXPos, strikeWidth);
         });
 
         projectiles.forEach((p, i) => {
@@ -750,12 +719,11 @@ document.addEventListener('DOMContentLoaded', () => {
         enemyProjectiles.forEach((p, i) => {
             if (!isMultiplayer && p.canRicochet && p.bouncesLeft > 0) {
                 if (p.x <= p.radius || p.x >= canvas.width - p.radius) {
-                    p.velocity.x *= -1;
-                    p.bouncesLeft--;
+                    p.velocity.x *= -1; p.bouncesLeft--;
                     p.x = p.x <= p.radius ? p.radius + 1 : canvas.width - p.radius - 1;
                 }
             }
-            p.update();
+            if(!isMultiplayer) p.update(); else p.draw();
             if (p.x < -50 || p.x > canvas.width+50 || p.y < -50 || p.y > canvas.height+50) {
                 if (!isMultiplayer) enemyProjectiles.splice(i, 1);
             }
@@ -779,31 +747,19 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
             const p = enemyProjectiles[i];
             
-            // Colisão com o Escudo Mágico
             if (player.shield.active) {
                 const dx = p.x - (player.x + player.width / 2);
                 const dy = p.y - (player.y + player.height / 2);
-                const distance = Math.hypot(dx, dy);
-
-                if (distance < player.shield.radius + p.radius) {
-                    if (isMultiplayer && socket) {
-                        socket.emit('enemyProjectileDestroyed', p.id);
-                    }
-                    if (!isMultiplayer) { // Em SP, o cliente decide
-                        enemyProjectiles.splice(i, 1);
-                    }
-                    continue; // Projétil destruído, pular para o próximo
+                if (Math.hypot(dx, dy) < player.shield.radius + p.radius) {
+                    player.shield.hp -= p.damage;
+                    if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', p.id);
+                    if (!isMultiplayer) enemyProjectiles.splice(i, 1);
+                    continue;
                 }
             }
 
-            // Colisão com o Jogador ou Aliado
-            if (checkCollision(player, p)) {
-                player.takeDamage(p.damage);
-                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
-            } else if (player.ally && checkCollision(player.ally, p)) {
-                player.ally.takeDamage(p.damage);
-                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
-            }
+            if (checkCollision(player, p)) { player.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); } 
+            else if (player.ally && checkCollision(player.ally, p)) { player.ally.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); }
         }
 
         enemies.forEach((enemy) => {
@@ -822,10 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
-                                if (currentIndex !== -1) {
-                                    enemies.splice(currentIndex, 1); 
-                                    player.addExp(expGain);
-                                }
+                                if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); }
                             }, 0);
                         }
                     }
@@ -847,8 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const obj2Left = obj2.x - r2; const obj2Right = obj2.x + (w2 || r2);
         const obj2Top = obj2.y - r2; const obj2Bottom = obj2.y + (h2 || r2);
 
-        return (obj1Left < obj2Right && obj1Right > obj2Left &&
-                obj1Top < obj2Bottom && obj1Bottom > obj2Top);
+        return (obj1Left < obj2Right && obj1Right > obj2Left && obj1Top < obj2Bottom && obj1Bottom > obj2Top);
     }
 
     function updateUI() {
@@ -884,27 +836,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showUpgradeModal() {
         isPaused = true; upgradeOptionsContainer.innerHTML = '';
+        const currentWave = isMultiplayer ? spState.wave : spState.wave;
         const allUpgrades = [
             { name: "Cadência Rápida", desc: "+10% velocidade de tiro", apply: p => { p.shootCooldown *= 0.90; p.cadenceUpgrades++; }, available: p => p.cadenceUpgrades < 4 },
             { name: "Bala Potente", desc: "+20% dano", apply: p => p.bulletDamage = Math.ceil(p.bulletDamage * 1.2), available: () => true },
             { name: "Pele de Aço", desc: "+25 HP máximo", apply: p => { p.maxHp += 25; p.hp += 25; }, available: () => true },
             { name: "Velocista", desc: "+10% velocidade de mov.", apply: p => p.speed *= 1.1, available: () => true },
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
-            { name: "Chame um Amigo", desc: "Cria um ajudante que atira automaticamente.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => spState.wave >= 4 && !p.ally && spState.wave >= p.allyCooldownWave },
+            { name: "Chame um Amigo", desc: "Cria um ajudante (lata de lixo) que atira automaticamente.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => currentWave >= 4 && !p.ally && currentWave >= p.allyCooldownWave },
             { 
                 name: "Fúria dos Céus (Raio)", 
-                desc: "A cada 7s, 3 raios caem do céu, causando dano massivo. Efeito permanente.", 
+                desc: "A cada 9s, 3 raios caem do céu, causando dano massivo. Efeito permanente.", 
                 apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, 
-                available: p => spState.wave >= 6 && !p.hasLightning // Disponível a partir da horda 6
+                available: p => currentWave >= 8 && !p.hasLightning
             },
             { 
                 name: "Escudo Mágico", 
-                desc: "Cria um escudo impenetrável por 35 segundos.", 
-                apply: p => { 
-                    p.shield.active = true; 
-                    p.shield.endTime = Date.now() + 35000; 
-                }, 
-                available: p => spState.wave >= 5 && !p.shield.active 
+                desc: "Cria um escudo com 3000 de vida que bloqueia projéteis. Renovar restaura a vida.", 
+                apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, 
+                available: p => currentWave >= 5
             }
         ];
 
@@ -926,53 +876,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- EVENT LISTENERS ---
     window.addEventListener('resize', resizeCanvas);
-    
-    window.addEventListener('keydown', (e) => {
-        if (!isGameRunning || isPaused) return;
-        switch (e.code) {
-            case 'KeyA': case 'ArrowLeft': keys.a.pressed = true; break;
-            case 'KeyD': case 'ArrowRight': keys.d.pressed = true; break;
-            case 'Space': case 'KeyW': case 'ArrowUp': if(player) player.jump(); break;
-        }
-    });
-    window.addEventListener('keyup', (e) => {
-        if (!isGameRunning) return;
-        switch (e.code) {
-            case 'KeyA': case 'ArrowLeft': keys.a.pressed = false; break;
-            case 'KeyD': case 'ArrowRight': keys.d.pressed = false; break;
-        }
-    });
-
+    window.addEventListener('keydown', (e) => { if (!isGameRunning || isPaused) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = true; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = true; break; case 'Space': case 'KeyW': case 'ArrowUp': if(player) player.jump(); break; } });
+    window.addEventListener('keyup', (e) => { if (!isGameRunning) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = false; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = false; break; } });
     canvas.addEventListener('mousemove', (e) => { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
     canvas.addEventListener('mousedown', () => { if (isGameRunning && !isPaused) mouse.down = true; });
     window.addEventListener('mouseup', () => { mouse.down = false; });
 
     function setupTouchControls() {
         function handleJoystick(e, stick, knob, state) {
-            e.preventDefault();
-            const rect = stick.getBoundingClientRect();
-            const touch = e.touches[0];
-            let x = touch.clientX - rect.left - rect.width / 2;
-            let y = touch.clientY - rect.top - rect.height / 2;
-            const distance = Math.min(rect.width / 4, Math.hypot(x, y));
-            const angle = Math.atan2(y, x);
+            e.preventDefault(); const rect = stick.getBoundingClientRect(); const touch = e.touches[0];
+            let x = touch.clientX - rect.left - rect.width / 2; let y = touch.clientY - rect.top - rect.height / 2;
+            const distance = Math.min(rect.width / 4, Math.hypot(x, y)); const angle = Math.atan2(y, x);
             state.active = true; state.angle = angle;
             knob.style.transform = `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px)`;
         }
-        function resetJoystick(knob, state) {
-            state.active = false; knob.style.transform = `translate(0px, 0px)`;
-        }
-
+        function resetJoystick(knob, state) { state.active = false; knob.style.transform = `translate(0px, 0px)`; }
         aimJoystick.addEventListener('touchstart', (e) => handleJoystick(e, aimJoystick, aimJoystickKnob, aimStick), { passive: false });
         aimJoystick.addEventListener('touchmove', (e) => handleJoystick(e, aimJoystick, aimJoystickKnob, aimStick), { passive: false });
         aimJoystick.addEventListener('touchend', () => resetJoystick(aimJoystickKnob, aimStick));
-        
-        const addTouchListener = (btn, key) => {
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key].pressed = true; }, { passive: false });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key].pressed = false; });
-        };
-        addTouchListener(touchLeftBtn, 'a');
-        addTouchListener(touchRightBtn, 'd');
+        const addTouchListener = (btn, key) => { btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key].pressed = true; }, { passive: false }); btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key].pressed = false; }); };
+        addTouchListener(touchLeftBtn, 'a'); addTouchListener(touchRightBtn, 'd');
     }
     setupTouchControls();
 
@@ -981,10 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
     restartBtn.addEventListener('click', () => startGame(isMultiplayer));
     backToMenuBtn.addEventListener('click', returnToMenu);
     quitBtn.addEventListener('click', returnToMenu);
-    pauseBtn.addEventListener('click', () => {
-        if (isMultiplayer) return; isPaused = !isPaused;
-        pauseBtn.textContent = isPaused ? '▶' : '❚❚';
-    });
+    pauseBtn.addEventListener('click', () => { if (isMultiplayer) return; isPaused = !isPaused; pauseBtn.textContent = isPaused ? '▶' : '❚❚'; });
     
     showRankingBtn.addEventListener('click', async () => {
         try {

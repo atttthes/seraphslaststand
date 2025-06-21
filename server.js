@@ -53,7 +53,7 @@ const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
 const LOGICAL_WIDTH = 900;
 const LOGICAL_HEIGHT = 1600;
-const GAME_TICK_RATE = 1000 / 60;
+const GAME_TICK_RATE = 1000 / 60; // 60 updates per second
 
 // --- Constantes de Posição ---
 const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5;
@@ -61,9 +61,7 @@ const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3;
 const RICOCHET_LINE_Y = 180;
 const SNIPER_LINE_Y = 80;
 
-// --- Configurações das Hordas e Inimigos (ATUALIZADO) ---
-// Todos os cooldowns aumentados em 20% (multiplicados por 1.2)
-// Inimigo padrão sempre vermelho
+// --- Configurações das Hordas e Inimigos ---
 const WAVE_CONFIG = [
     { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
     { color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
@@ -77,12 +75,11 @@ const BOSS_CONFIG = {
 const RICOCHET_CONFIG = { 
     color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 35, height: 35 
 };
-const WAVE_INTERVAL_SECONDS = 10; // Reduzido de 15 para 10
+const WAVE_INTERVAL_SECONDS = 10;
 
 // --- Função para escalar dificuldade ---
 function getScalingFactor(wave) {
     if (wave <= 1) return 1.0;
-    // Aumento de 10% por horda após a primeira, com um teto de 50% de bônus (atingido na horda 6)
     return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
 }
 
@@ -125,8 +122,10 @@ function findOrCreateRoom() {
     const newRoomName = `room_${Date.now()}`;
     rooms[newRoomName] = {
         players: {}, enemies: [], enemyProjectiles: [],
-        lightningStrikes: [], // Para o novo item Raio
+        lightningStrikes: [], 
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
+        sniperShotQueue: [], // Para a nova IA de sniper
+        nextSniperShotTime: 0, // Para a nova IA de sniper
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -143,16 +142,18 @@ function spawnEnemy(room, waveConfig) {
 }
 
 function spawnSniper(room, waveConfig) {
-    room.enemies.push({
+    const sniper = {
         id: `sniper_${Date.now()}_${Math.random()}`,
         x: Math.random() * (LOGICAL_WIDTH - 25), y: -50,
         width: 25, height: 50, color: '#00FFFF',
         hp: waveConfig.hp * 0.8, speed: 1.0, horizontalSpeed: 0.5,
         damage: waveConfig.damage * 0.5, projectileDamage: waveConfig.projectileDamage * 1.15,
-        shootCooldown: waveConfig.shootCooldown * 1.30 * 1.2, // Aumento de 20%
+        shootCooldown: waveConfig.shootCooldown * 1.30 * 1.2,
         isSniper: true, maxHp: waveConfig.hp * 0.8, lastShotTime: 0,
         patrolOriginX: null, reachedPosition: false,
-    });
+    };
+    room.enemies.push(sniper);
+    room.sniperShotQueue.push(sniper.id); // Adiciona na fila de tiro
 }
 
 function spawnRicochet(room, wave) {
@@ -190,7 +191,7 @@ setInterval(() => {
 
         room.gameTime++;
 
-        // LÓGICA DE HORDAS (ATUALIZADA)
+        // LÓGICA DE HORDAS
         if (room.gameTime > 1 && room.gameTime % 60 === 0) {
             if (room.waveState === 'intermission') {
                 room.waveTimer--;
@@ -198,27 +199,22 @@ setInterval(() => {
                     room.wave++; room.waveState = 'active';
                     const waveConfig = getWaveConfig(room.wave);
                     
-                    // Inimigos padrão: Começa com 2, +1 a cada horda
                     const normalEnemyCount = room.wave + 1; 
                     for (let i = 0; i < normalEnemyCount; i++) {
                         setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250);
                     }
-                    // Snipers: Mantém a lógica original
                     if (room.wave >= 3) {
                         const sniperCount = 1 + (room.wave - 3) * 2;
                         for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig);
                     }
-                    // Ricochets: A partir da horda 7, a cada 2 hordas
                     if (room.wave >= 7 && (room.wave - 7) % 2 === 0) {
                         const ricochetCount = Math.floor((room.wave - 7) / 2) + 1;
                         for (let i = 0; i < ricochetCount; i++) spawnRicochet(room, room.wave);
                     }
-                    // Boss: A partir da horda 10, a cada 3 hordas
                     if (room.wave >= 10 && (room.wave - 10) % 3 === 0) {
                         const bossCount = Math.floor((room.wave - 10) / 3) + 1;
                         for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave);
                     }
-
                 }
             } else if (room.waveState === 'active' && room.enemies.length === 0) {
                 console.log(`Sala ${roomName} limpou a horda ${room.wave}`);
@@ -227,8 +223,8 @@ setInterval(() => {
             }
         }
         
-        // --- LÓGICA DO RAIO ---
-        const LIGHTNING_INTERVAL_TICKS = Math.round(7 * (1000 / GAME_TICK_RATE));
+        // --- LÓGICA DO RAIO (ATUALIZADA) ---
+        const LIGHTNING_INTERVAL_TICKS = Math.round(9 * (1000 / GAME_TICK_RATE)); // 9 segundos
         const LIGHTNING_DAMAGE = WAVE_CONFIG[0].hp; // 120
         const LIGHTNING_VISUAL_DURATION_TICKS = 30; // 0.5s
 
@@ -253,8 +249,9 @@ setInterval(() => {
                 }
                 room.enemies = room.enemies.filter(enemy => {
                     if (enemy.hp <= 0) {
+                        if (enemy.isSniper) room.sniperShotQueue = room.sniperShotQueue.filter(id => id !== enemy.id);
                         const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
-                        io.to(room.name).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain });
+                        io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain });
                         return false;
                     }
                     return true;
@@ -262,12 +259,31 @@ setInterval(() => {
             });
         }
 
+        // --- IA DOS SNIPERS (ATUALIZADA) ---
+        if (room.gameTime >= room.nextSniperShotTime && room.sniperShotQueue.length > 0) {
+            const sniperId = room.sniperShotQueue.shift();
+            const sniper = room.enemies.find(e => e.id === sniperId && e.isSniper);
+            
+            if (sniper && sniper.reachedPosition) {
+                 const targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(sniper.x - a.x, sniper.y - a.y) - Math.hypot(sniper.x - b.x, sniper.y - b.y))[0] : null;
+                 if (targetPlayer) {
+                    sniper.lastShotTime = Date.now();
+                    const angle = Math.atan2((targetPlayer.y + 30) - (sniper.y + sniper.height / 2), (targetPlayer.x + 20) - (sniper.x + sniper.width / 2));
+                    room.enemyProjectiles.push({
+                        id: `ep_${Date.now()}_${Math.random()}`, x: sniper.x + sniper.width / 2, y: sniper.y + sniper.height / 2,
+                        vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7,
+                        damage: sniper.projectileDamage, color: sniper.color
+                    });
+                 }
+                 room.nextSniperShotTime = room.gameTime + Math.round(400 / GAME_TICK_RATE); // 0.4s delay
+            }
+            if(sniper) room.sniperShotQueue.push(sniperId); // Coloca de volta no fim da fila
+        }
 
-        // IA DOS INIMIGOS
+        // IA DOS OUTROS INIMIGOS
         room.enemies.forEach(enemy => {
             const targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0] : null;
-            let canShoot = false;
-
+            
             let targetY;
             if (enemy.isSniper) targetY = SNIPER_LINE_Y;
             else if (enemy.isRicochet) targetY = RICOCHET_LINE_Y;
@@ -278,7 +294,6 @@ setInterval(() => {
                 if (enemy.y < targetY) { enemy.y += enemy.speed; } 
                 else { enemy.y = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; }
             } else {
-                canShoot = true;
                 const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
                 if (targetPlayer && !enemy.isRicochet) {
                      const moveDirection = Math.sign(targetPlayer.x - enemy.x);
@@ -294,22 +309,17 @@ setInterval(() => {
             if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
             
             const now = Date.now();
-            if (canShoot && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
+            if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
+                if (enemy.isSniper) return; // Lógica de tiro do sniper movida para cima
+
                 if (enemy.isRicochet && targetPlayer) {
                     enemy.lastShotTime = now;
-                    // IA de Ricochete: Calcula tiro na parede para acertar o jogador "virtual"
                     const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
                     const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
-                    const virtualPlayerY = targetPlayer.y;
-
-                    const angle = Math.atan2(
-                        (virtualPlayerY + 30) - (enemy.y + enemy.height / 2), 
-                        (virtualPlayerX + 20) - (enemy.x + enemy.width / 2)
-                    );
+                    const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (virtualPlayerX + 20) - (enemy.x + enemy.width / 2));
                     room.enemyProjectiles.push({
-                        id: `ep_${Date.now()}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
-                        vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8,
-                        damage: enemy.projectileDamage, color: enemy.color,
+                        id: `ep_${now}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
+                        vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, damage: enemy.projectileDamage, color: enemy.color,
                         canRicochet: true, bouncesLeft: 1
                     });
                 } else if (targetPlayer) {
@@ -329,25 +339,18 @@ setInterval(() => {
             const p = room.enemyProjectiles[i];
             
             if (p.canRicochet && p.bouncesLeft > 0) {
-                if (p.x <= 0 || p.x >= LOGICAL_WIDTH) {
-                    p.vx *= -1;
-                    p.bouncesLeft--;
-                    p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1;
-                }
+                if (p.x <= 0 || p.x >= LOGICAL_WIDTH) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1; }
             }
             
-            p.x += p.vx;
-            p.y += p.vy;
+            p.x += p.vx; p.y += p.vy;
 
             if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) {
-                room.enemyProjectiles.splice(i, 1);
-                continue;
+                room.enemyProjectiles.splice(i, 1); continue;
             }
             for (const player of playerList) {
                 if (p.x > player.x && p.x < player.x + 40 && p.y > player.y && p.y < player.y + 60) {
                     io.to(player.id).emit('playerHit', p.damage);
-                    room.enemyProjectiles.splice(i, 1);
-                    break; 
+                    room.enemyProjectiles.splice(i, 1); break; 
                 }
             }
         }
@@ -367,11 +370,8 @@ io.on('connection', (socket) => {
 
         const room = rooms[roomName];
         room.players[socket.id] = { 
-            id: socket.id, 
-            ...playerData, 
-            hasAlly: false, 
-            allyCooldownWave: 0,
-            hasLightning: false 
+            id: socket.id, ...playerData, 
+            hasAlly: false, allyCooldownWave: 0, hasLightning: false 
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -396,6 +396,7 @@ io.on('connection', (socket) => {
         if (enemy) {
             enemy.hp -= damage;
             if (enemy.hp <= 0) {
+                if (enemy.isSniper) room.sniperShotQueue = room.sniperShotQueue.filter(id => id !== enemyId);
                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
                 const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
