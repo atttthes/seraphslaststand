@@ -14,7 +14,13 @@ const PORT = process.env.PORT || 10000;
 // --- Configuração do Express ---
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
-app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
+
+// Servir o index.html a partir do diretório raiz do projeto, não de 'public'
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Servir os arquivos estáticos (js, css) do diretório raiz
 app.use(express.static(__dirname));
 
 // --- API para o Ranking ---
@@ -24,20 +30,21 @@ app.get('/api/ranking', async (req, res) => {
         res.json(scores);
     } catch (error) {
         console.error("Erro ao buscar ranking:", error);
-        res.status(500).json({ message: "Erro ao buscar ranking." });
+        res.status(500).json({ message: "Erro ao buscar ranking", error });
     }
 });
+
 app.post('/api/ranking', async (req, res) => {
     try {
         const { name, timeSurvived } = req.body;
         if (!name || typeof timeSurvived !== 'number') {
-            return res.status(400).json({ message: "Dados inválidos." });
+            return res.status(400).json({ message: "Nome e tempo são obrigatórios." });
         }
-        await db.addScore(name, timeSurvived);
-        res.status(201).json({ message: "Pontuação adicionada com sucesso." });
+        const result = await db.addScore(name, timeSurvived);
+        res.status(201).json(result);
     } catch (error) {
-        console.error("Erro ao adicionar pontuação:", error);
-        res.status(500).json({ message: "Erro ao adicionar pontuação." });
+        console.error("Erro ao salvar pontuação:", error);
+        res.status(500).json({ message: "Erro ao salvar pontuação", error });
     }
 });
 
@@ -47,27 +54,68 @@ const MAX_PLAYERS_PER_ROOM = 4;
 const LOGICAL_WIDTH = 900;
 const LOGICAL_HEIGHT = 1600;
 const GAME_TICK_RATE = 1000 / 60; // 60 updates per second
+const ENEMY_SHOOT_DELAY_TICKS = 18; // 0.3s * 60fps
 
-const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5, BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3, RICOCHET_LINE_Y = 180, SNIPER_LINE_Y = 80;
+// --- Constantes de Posição ---
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5;
+const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3;
+const RICOCHET_LINE_Y = 180;
+const SNIPER_LINE_Y = 80;
 
 // --- Configurações das Hordas e Inimigos ---
 const WAVE_CONFIG = [
-    { class: 'normal', color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-    { class: 'normal', color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-    { class: 'normal', color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-    { class: 'normal', color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-    { class: 'normal', color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+    { type: 'basic', color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+    { type: 'basic', color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+    { type: 'basic', color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+    { type: 'basic', color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+    { type: 'basic', color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
 ];
-const BOSS_CONFIG = { class: 'boss', color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true };
-const RICOCHET_CONFIG = { class: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 35, height: 35 };
+const BOSS_CONFIG = {
+    type: 'boss', color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true
+};
+const RICOCHET_CONFIG = { 
+    type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 35, height: 35 
+};
+const SNIPER_CONFIG = {
+    type: 'sniper', color: '#00FFFF', speed: 1.0, horizontalSpeed: 0.5, isSniper: true, width: 25, height: 50
+};
 const WAVE_INTERVAL_SECONDS = 10;
-const SNIPER_BASE_CONFIG = { class: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5, projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.3, width: 25, height: 50, isSniper: true, speed: 1.0, horizontalSpeed: 0.5 };
 
 // --- Função para escalar dificuldade ---
-function getScalingFactor(wave) { if (wave <= 1) return 1.0; return 1.0 + Math.min(0.5, (wave - 1) * 0.1); }
-function getWaveConfig(wave) { const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1]; const scalingFactor = getScalingFactor(wave); return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) }; }
-function getBossConfig(wave) { const scalingFactor = getScalingFactor(wave); return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) }; }
-function getRicochetConfig(wave) { const scalingFactor = getScalingFactor(wave); return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) }; }
+function getScalingFactor(wave) {
+    if (wave <= 1) return 1.0;
+    return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
+}
+
+function getWaveConfig(wave) {
+    const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...baseConfig, 
+        hp: Math.floor(baseConfig.hp * scalingFactor), 
+        damage: Math.floor(baseConfig.damage * scalingFactor), 
+        projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) 
+    };
+}
+
+function getBossConfig(wave) {
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...BOSS_CONFIG, 
+        hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), 
+        damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), 
+        projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) 
+    };
+}
+
+function getRicochetConfig(wave) {
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...RICOCHET_CONFIG, 
+        hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), 
+        projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) 
+    };
+}
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -78,18 +126,91 @@ function findOrCreateRoom() {
     const newRoomName = `room_${Date.now()}`;
     rooms[newRoomName] = {
         players: {}, enemies: [], enemyProjectiles: [],
-        lightningStrikes: [], activeBlades: [],
+        lightningStrikes: [], 
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
-        lastShotTimeByClass: {}, // Para IA de tiro
+        classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 }
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
 }
 
-function spawnEnemy(room, waveConfig) { room.enemies.push({ id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random() * (LOGICAL_WIDTH - 40), y: -50, width: 40, height: 40, ...waveConfig, maxHp: waveConfig.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, horizontalSpeed: waveConfig.speed / 2 }); }
-function spawnSniper(room, waveConfig) { const config = getWaveConfig(room.wave); room.enemies.push({ id: `sniper_${Date.now()}_${Math.random()}`, x: Math.random() * (LOGICAL_WIDTH - SNIPER_BASE_CONFIG.width), y: -50, ...SNIPER_BASE_CONFIG, hp: config.hp * SNIPER_BASE_CONFIG.hpMultiplier, maxHp: config.hp * SNIPER_BASE_CONFIG.hpMultiplier, damage: config.damage * SNIPER_BASE_CONFIG.damageMultiplier, projectileDamage: config.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier, shootCooldown: config.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier, lastShotTime: 0, patrolOriginX: null, reachedPosition: false }); }
-function spawnRicochet(room, wave) { const ricochetConfig = getRicochetConfig(wave); room.enemies.push({ id: `ricochet_${Date.now()}_${Math.random()}`, x: Math.random() * (LOGICAL_WIDTH - ricochetConfig.width), y: -50, ...ricochetConfig, maxHp: ricochetConfig.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, }); }
-function spawnBoss(room, wave) { const bossConfig = getBossConfig(wave); room.enemies.push({ id: `boss_${Date.now()}_${Math.random()}`, x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height, ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 1.2, maxHp: bossConfig.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, }); }
+function spawnEnemy(room, waveConfig) {
+    room.enemies.push({
+        id: `enemy_${Date.now()}_${Math.random()}`,
+        x: Math.random() * (LOGICAL_WIDTH - 40), y: -50,
+        width: 40, height: 40, ...waveConfig, maxHp: waveConfig.hp,
+        lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
+        horizontalSpeed: waveConfig.speed / 2,
+    });
+}
+
+function spawnSniper(room, waveConfig) {
+    const baseDamage = waveConfig.damage;
+    const baseProjDamage = waveConfig.projectileDamage;
+    const sniper = {
+        id: `sniper_${Date.now()}_${Math.random()}`,
+        x: Math.random() * (LOGICAL_WIDTH - 25), y: -50,
+        ...SNIPER_CONFIG,
+        hp: waveConfig.hp * 0.8, maxHp: waveConfig.hp * 0.8,
+        damage: baseDamage * 0.5, 
+        projectileDamage: baseProjDamage * 1.15,
+        shootCooldown: waveConfig.shootCooldown * 1.30 * 1.2,
+        lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
+    };
+    room.enemies.push(sniper);
+}
+
+function spawnRicochet(room, wave) {
+    const ricochetConfig = getRicochetConfig(wave);
+    room.enemies.push({
+        id: `ricochet_${Date.now()}_${Math.random()}`,
+        x: Math.random() * (LOGICAL_WIDTH - ricochetConfig.width), y: -50,
+        ...ricochetConfig, maxHp: ricochetConfig.hp, lastShotTime: 0,
+        patrolOriginX: null, reachedPosition: false,
+    });
+}
+
+function spawnBoss(room, wave) {
+    const bossConfig = getBossConfig(wave);
+    room.enemies.push({
+        id: `boss_${Date.now()}_${Math.random()}`,
+        x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height,
+        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 1.2,
+        maxHp: bossConfig.hp, lastShotTime: 0,
+        patrolOriginX: null, reachedPosition: false,
+    });
+}
+
+function shootForEnemy(enemy, room, targetPlayer) {
+    if (!targetPlayer) return;
+    
+    const now = Date.now();
+    enemy.lastShotTime = now;
+    let projectile = {
+        id: `ep_${now}_${Math.random()}`,
+        x: enemy.x + enemy.width / 2,
+        y: enemy.y + enemy.height / 2,
+        damage: enemy.projectileDamage,
+        color: enemy.color,
+        originId: enemy.id // Important for reflection
+    };
+
+    if (enemy.isRicochet) {
+        const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
+        const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
+        const angle = Math.atan2((targetPlayer.y + 30) - projectile.y, (virtualPlayerX + 20) - projectile.x);
+        projectile.vx = Math.cos(angle) * 8;
+        projectile.vy = Math.sin(angle) * 8;
+        projectile.canRicochet = true;
+        projectile.bouncesLeft = 1;
+    } else {
+        const angle = Math.atan2((targetPlayer.y + 30) - projectile.y, (targetPlayer.x + 20) - projectile.x);
+        const speed = enemy.isSniper ? 7 : 5;
+        projectile.vx = Math.cos(angle) * speed;
+        projectile.vy = Math.sin(angle) * speed;
+    }
+    room.enemyProjectiles.push(projectile);
+}
 
 // Game loop do servidor
 setInterval(() => {
@@ -97,30 +218,13 @@ setInterval(() => {
         const room = rooms[roomName];
         const playerList = Object.values(room.players);
 
-        if (playerList.length === 0) { console.log(`Deletando sala vazia: ${roomName}`); delete rooms[roomName]; continue; }
+        if (playerList.length === 0) {
+            console.log(`Deletando sala vazia: ${roomName}`);
+            delete rooms[roomName];
+            continue;
+        }
 
         room.gameTime++;
-        
-        // Atualizar estado dos jogadores (recargas)
-        playerList.forEach(p => {
-            if (p.hasTotalReaction && !p.totalReactionReady && room.wave >= p.totalReactionCooldownEndWave) {
-                p.totalReactionReady = true;
-            }
-        });
-        
-        // Atualizar lâminas ativas
-        for (let i = room.activeBlades.length - 1; i >= 0; i--) {
-            const blade = room.activeBlades[i];
-            blade.life--;
-            if (blade.life <= 0) { room.activeBlades.splice(i, 1); continue; }
-            
-            const owner = room.players[blade.ownerId];
-            if (owner) {
-                blade.y -= blade.speed;
-                const progress = (owner.y - blade.y) / owner.y;
-                blade.width = Math.min(blade.maxWidth, blade.baseWidth + progress * blade.maxWidth);
-            }
-        }
 
         // LÓGICA DE HORDAS
         if (room.gameTime > 1 && room.gameTime % 60 === 0) {
@@ -128,65 +232,102 @@ setInterval(() => {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
                     room.wave++; room.waveState = 'active';
+                    io.to(roomName).emit('waveStart', room.wave);
                     const waveConfig = getWaveConfig(room.wave);
-                    const normalEnemyCount = room.wave + 1; for (let i = 0; i < normalEnemyCount; i++) { setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250); }
-                    if (room.wave >= 3) { const sniperCount = 1 + (room.wave - 3) * 2; for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig); }
-                    if (room.wave >= 7 && (room.wave - 7) % 2 === 0) { const ricochetCount = Math.floor((room.wave - 7) / 2) + 1; for (let i = 0; i < ricochetCount; i++) spawnRicochet(room, room.wave); }
-                    if (room.wave >= 10 && (room.wave - 10) % 3 === 0) { const bossCount = Math.floor((room.wave - 10) / 3) + 1; for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave); }
+                    
+                    const normalEnemyCount = room.wave + 1; 
+                    for (let i = 0; i < normalEnemyCount; i++) {
+                        setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250);
+                    }
+                    if (room.wave >= 3) {
+                        const sniperCount = 1 + Math.floor((room.wave - 3) / 2);
+                        for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig);
+                    }
+                    if (room.wave >= 7 && (room.wave - 7) % 2 === 0) {
+                        const ricochetCount = Math.floor((room.wave - 7) / 2) + 1;
+                        for (let i = 0; i < ricochetCount; i++) spawnRicochet(room, room.wave);
+                    }
+                    if (room.wave >= 10 && (room.wave - 10) % 3 === 0) {
+                        const bossCount = Math.floor((room.wave - 10) / 3) + 1;
+                        for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave);
+                    }
                 }
             } else if (room.waveState === 'active' && room.enemies.length === 0) {
-                console.log(`Sala ${roomName} limpou a horda ${room.wave}`); room.waveState = 'intermission'; room.waveTimer = WAVE_INTERVAL_SECONDS;
+                console.log(`Sala ${roomName} limpou a horda ${room.wave}`);
+                room.waveState = 'intermission';
+                room.waveTimer = WAVE_INTERVAL_SECONDS;
             }
         }
         
-        // --- LÓGICA DO RAIO ---
-        playerList.forEach(p => {
-            if (p.hasLightning && room.gameTime > p.nextLightningTime) {
-                p.nextLightningTime = room.gameTime + (9 * 60); // 9 segundos
-                for (let i = 0; i < 3; i++) {
-                    setTimeout(() => {
-                        if (rooms[roomName]) { // Verifica se a sala ainda existe
-                            const strikeX = Math.random() * LOGICAL_WIDTH;
-                            room.lightningStrikes.push({ x: strikeX, life: 30 });
-                            room.enemies.forEach(enemy => { if (Math.abs(enemy.x + enemy.width / 2 - strikeX) < 40) { enemy.hp -= 2500; } });
-                            room.enemies = room.enemies.filter(e => e.hp > 0);
-                        }
-                    }, i * 200);
-                }
-            }
-        });
-        if (room.lightningStrikes.length > 0) room.lightningStrikes = room.lightningStrikes.filter(ls => ls.life-- > 0);
+        // --- LÓGICA DO RAIO (ATUALIZADA) ---
+        const LIGHTNING_INTERVAL_TICKS = Math.round(9 * (1000 / GAME_TICK_RATE));
+        const LIGHTNING_DAMAGE = WAVE_CONFIG[0].hp; // 120
+        const LIGHTNING_VISUAL_DURATION_TICKS = 30; // 0.5s
 
+        room.lightningStrikes = room.lightningStrikes.filter(strike => 
+            room.gameTime < strike.creationTime + LIGHTNING_VISUAL_DURATION_TICKS
+        );
+        
+        if (room.gameTime > 1 && room.gameTime % LIGHTNING_INTERVAL_TICKS === 0) {
+            const lightningPlayers = playerList.filter(p => p.hasLightning);
+            lightningPlayers.forEach(player => {
+                for (let i = 0; i < 3; i++) {
+                    const strikeX = Math.random() * LOGICAL_WIDTH;
+                    const strikeWidth = 40 * 1.2;
+                    room.lightningStrikes.push({
+                        id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime,
+                    });
+                    room.enemies.forEach(enemy => {
+                        if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) {
+                            enemy.hp -= LIGHTNING_DAMAGE;
+                        }
+                    });
+                }
+                room.enemies = room.enemies.filter(enemy => {
+                    if (enemy.hp <= 0) {
+                        const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                        io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain });
+                        return false;
+                    }
+                    return true;
+                });
+            });
+        }
+        
         // IA DOS INIMIGOS
         room.enemies.forEach(enemy => {
-            const targetPlayer = playerList.length > 0 ? playerList[room.gameTime % playerList.length] : null;
-            if (!targetPlayer) return;
-
-            // Movimento do inimigo
-            let targetY;
-            if (enemy.isSniper) targetY = SNIPER_LINE_Y; else if (enemy.isRicochet) targetY = RICOCHET_LINE_Y; else if (enemy.isBoss) targetY = BOSS_LINE_Y; else targetY = DEFENSE_LINE_Y;
-            if (!enemy.reachedPosition) { if (enemy.y < targetY) { enemy.y += enemy.speed; } else { enemy.y = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; } }
-            else { const patrolRange = 100; enemy.x = enemy.patrolOriginX + Math.sin(room.gameTime / (100 / enemy.horizontalSpeed)) * patrolRange; }
-            if (enemy.x < 0) enemy.x = 0; if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
+            const targetPlayer = playerList.length > 0 ? playerList.sort((a, b) => Math.hypot(enemy.x - a.x, enemy.y - a.y) - Math.hypot(enemy.x - b.x, enemy.y - b.y))[0] : null;
             
-            // Lógica de Tiro Coordenado
-            const now = Date.now();
-            const enemyClass = enemy.class || 'normal';
-            const canShoot = now > (enemy.lastShotTime || 0) + enemy.shootCooldown;
-            const classCooldown = now > (room.lastShotTimeByClass[enemyClass] || 0) + 300; // 0.3s
+            let targetY;
+            if (enemy.isSniper) targetY = SNIPER_LINE_Y;
+            else if (enemy.isRicochet) targetY = RICOCHET_LINE_Y;
+            else if (enemy.isBoss) targetY = BOSS_LINE_Y;
+            else targetY = DEFENSE_LINE_Y;
 
-            if (enemy.reachedPosition && canShoot && classCooldown) {
-                room.lastShotTimeByClass[enemyClass] = now;
-                enemy.lastShotTime = now;
-                
-                const projProps = { id: `ep_${now}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2, damage: enemy.projectileDamage, color: enemy.color, shooterId: enemy.id };
-                if (enemy.isRicochet) {
-                    const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0; const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
-                    const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (virtualPlayerX + 20) - (enemy.x + enemy.width / 2));
-                    room.enemyProjectiles.push({ ...projProps, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, canRicochet: true, bouncesLeft: 1 });
-                } else {
-                    const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (targetPlayer.x + 20) - (enemy.x + enemy.width / 2));
-                    room.enemyProjectiles.push({ ...projProps, vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7 });
+            if (!enemy.reachedPosition) {
+                if (enemy.y < targetY) { enemy.y += enemy.speed; } 
+                else { enemy.y = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; }
+            } else {
+                const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
+                if (targetPlayer && !enemy.isRicochet) {
+                     const moveDirection = Math.sign(targetPlayer.x - enemy.x);
+                     enemy.x += moveDirection * patrolSpeed;
+                }
+                const patrolRange = LOGICAL_WIDTH * (enemy.isBoss ? 0.3 : 0.1);
+                const leftBoundary = enemy.patrolOriginX - (patrolRange / 2);
+                const rightBoundary = enemy.patrolOriginX + (patrolRange / 2);
+                if (enemy.x < leftBoundary) enemy.x = leftBoundary;
+                if (enemy.x > rightBoundary - enemy.width) enemy.x = rightBoundary - enemy.width;
+            }
+            if (enemy.x < 0) enemy.x = 0;
+            if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
+            
+            const now = Date.now();
+            if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
+                const enemyType = enemy.type;
+                if(room.gameTime >= (room.classShootingCooldowns[enemyType] || 0)) {
+                    shootForEnemy(enemy, room, targetPlayer);
+                    room.classShootingCooldowns[enemyType] = room.gameTime + ENEMY_SHOOT_DELAY_TICKS;
                 }
             }
         });
@@ -195,37 +336,19 @@ setInterval(() => {
         for (let i = room.enemyProjectiles.length - 1; i >= 0; i--) {
             const p = room.enemyProjectiles[i];
             
-            // Colisão com Lâmina de Reação
-            let reflected = false;
-            for(const blade of room.activeBlades) {
-                const owner = room.players[blade.ownerId];
-                if(owner && p.x > owner.x - blade.width / 2 && p.x < owner.x + blade.width / 2 && p.y > blade.y && p.y < blade.y + 15) {
-                    const originalShooter = room.enemies.find(e => e.id === p.shooterId);
-                    if (originalShooter) {
-                        const angle = Math.atan2((originalShooter.y + originalShooter.height / 2) - p.y, (originalShooter.x + originalShooter.width / 2) - p.x);
-                        // Emitir um tiro de jogador em vez de criar um novo tipo de projétil
-                        io.to(roomName).emit('playerShot', {
-                            x: p.x / LOGICAL_WIDTH, y: p.y / LOGICAL_HEIGHT,
-                            angle: angle, speed: 12, damage: p.damage * 3
-                        });
-                    }
-                    room.enemyProjectiles.splice(i, 1);
-                    reflected = true;
-                    break;
-                }
+            if (p.canRicochet && p.bouncesLeft > 0) {
+                if (p.x <= 0 || p.x >= LOGICAL_WIDTH) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1; }
             }
-            if(reflected) continue;
-
-            if (p.canRicochet && p.bouncesLeft > 0) { if (p.x <= 0 || p.x >= LOGICAL_WIDTH) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1; } }
             
             p.x += p.vx; p.y += p.vy;
 
-            if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) { room.enemyProjectiles.splice(i, 1); continue; }
-            for (const player of playerList) { 
+            if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) {
+                room.enemyProjectiles.splice(i, 1); continue;
+            }
+            for (const player of playerList) {
                 if (p.x > player.x && p.x < player.x + 40 && p.y > player.y && p.y < player.y + 60) {
                     io.to(player.id).emit('playerHit', p.damage);
-                    room.enemyProjectiles.splice(i, 1);
-                    break; 
+                    room.enemyProjectiles.splice(i, 1); break; 
                 }
             }
         }
@@ -239,66 +362,107 @@ io.on('connection', (socket) => {
     console.log('Novo jogador conectado:', socket.id);
 
     socket.on('joinMultiplayer', (playerData) => {
-        const roomName = findOrCreateRoom(); socket.join(roomName); socket.room = roomName;
+        const roomName = findOrCreateRoom();
+        socket.join(roomName);
+        socket.room = roomName;
+
         const room = rooms[roomName];
-        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, allyCooldownWave: 0, hasLightning: false, nextLightningTime: 0, hasTotalReaction: false, totalReactionReady: false, totalReactionCooldownEndWave: 0 };
+        room.players[socket.id] = { 
+            id: socket.id, ...playerData, 
+            hasAlly: false, allyCooldownWave: 0, hasLightning: false,
+            hasTotalReaction: false, totalReactionCooldownWave: 0
+        };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
 
-    socket.on('playerUpdate', (data) => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) Object.assign(rooms[socket.room].players[socket.id], data); });
-    socket.on('playerShoot', (bulletData) => { if (socket.room) socket.to(socket.room).emit('playerShot', bulletData); });
-    socket.on('enemyHit', ({ enemyId, damage }) => {
+    socket.on('playerUpdate', (data) => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id] = { ...room.players[socket.id], ...data };
+        }
+    });
+
+    socket.on('playerShoot', (bulletData) => {
+        if(socket.room) socket.to(socket.room).emit('playerShot', bulletData);
+    });
+
+    socket.on('enemyHit', ({ enemyId, damage, isReflected }) => {
         const room = rooms[socket.room];
         if (!room) return;
+
+        // Validação anti-cheat para o dano refletido
+        if (isReflected) {
+            const player = room.players[socket.id];
+            if (!player || !player.hasTotalReaction || room.wave < player.totalReactionCooldownWave) {
+                console.log(`Tentativa de dano refletido inválida pelo jogador ${socket.id}`);
+                return;
+            }
+        }
+
         const enemy = room.enemies.find(e => e.id === enemyId);
         if (enemy) {
             enemy.hp -= damage;
             if (enemy.hp <= 0) {
-                const expGain = Math.floor(enemy.maxHp / 10);
-                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
+                const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
             }
         }
     });
-    socket.on('enemyProjectileDestroyed', (projectileId) => { if (rooms[socket.room]) rooms[socket.room].enemyProjectiles = rooms[socket.room].enemyProjectiles.filter(p => p.id !== projectileId); });
-    socket.on('playerGotAlly', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasAlly = true; rooms[socket.room].players[socket.id].allyCooldownWave = rooms[socket.room].wave + 5; } });
-    socket.on('playerLostAlly', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasAlly = false; });
-    socket.on('playerGotLightning', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasLightning = true; rooms[socket.room].players[socket.id].nextLightningTime = rooms[socket.room].gameTime + (2 * 60); } });
+
+    socket.on('enemyProjectileDestroyed', (projectileId) => {
+        const room = rooms[socket.room];
+        if (room) {
+            room.enemyProjectiles = room.enemyProjectiles.filter(p => p.id !== projectileId);
+        }
+    });
+
+    socket.on('playerGotAlly', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].hasAlly = true;
+        }
+    });
+
+    socket.on('playerLostAlly', () => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].hasAlly = false;
+            room.players[socket.id].allyCooldownWave = room.wave + 2;
+        }
+    });
     
+    socket.on('playerGotLightning', () => {
+        const room = rooms[socket.room];
+        if (!room || !room.players[socket.id]) return;
+        room.players[socket.id].hasLightning = true;
+    });
+
     socket.on('playerGotTotalReaction', () => {
         const room = rooms[socket.room];
         if (room && room.players[socket.id]) {
             room.players[socket.id].hasTotalReaction = true;
-            room.players[socket.id].totalReactionReady = true;
+            room.players[socket.id].totalReactionCooldownWave = 0; // Pronta para usar
         }
     });
 
-    socket.on('useTotalReaction', () => {
+    socket.on('playerUsedTotalReaction', () => {
         const room = rooms[socket.room];
-        const player = room?.players[socket.id];
-        if (player && player.totalReactionReady) {
-            player.totalReactionReady = false;
-            player.totalReactionCooldownEndWave = room.wave + 4;
-            
-            const ownerPos = room.players[socket.id];
-            room.activeBlades.push({
-                ownerId: socket.id,
-                y: ownerPos.y + 60,
-                width: 40,
-                baseWidth: 40,
-                maxWidth: LOGICAL_WIDTH * 1.5,
-                speed: 12,
-                life: 120 // 2 segundos
-            });
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].totalReactionCooldownWave = room.wave + 4; // Cooldown de 3 hordas (a atual + 3)
         }
     });
 
     socket.on('disconnect', () => {
         console.log('Jogador desconectado:', socket.id);
-        if (socket.room && rooms[socket.room]) {
-            delete rooms[socket.room].players[socket.id];
-            io.to(socket.room).emit('playerLeft', socket.id);
+        const roomName = socket.room;
+        if (roomName && rooms[roomName]) {
+            delete rooms[roomName].players[socket.id];
+            io.to(roomName).emit('playerLeft', socket.id);
+            if (Object.keys(rooms[roomName].players).length === 0) {
+                 console.log(`Sala ${roomName} está vazia, será removida.`);
+            }
         }
     });
 });
@@ -307,14 +471,13 @@ io.on('connection', (socket) => {
 // --- Inicialização do Servidor ---
 async function startServer() {
     try {
-        await db.connect(); // Conecta ao banco de dados primeiro
+        await db.connect();
         server.listen(PORT, () => {
-            // Esta mensagem aparecerá nos logs do Render, confirmando que o servidor iniciou
-            console.log(`Servidor rodando e ouvindo na porta ${PORT}`);
+            console.log(`Servidor rodando com sucesso na porta ${PORT}`);
         });
     } catch (err) {
-        console.error("Falha ao iniciar o servidor ou conectar ao DB:", err);
-        process.exit(1); // Encerra o processo se não conseguir iniciar
+        console.error("FALHA CRÍTICA: Não foi possível conectar ao MongoDB. O servidor não irá iniciar.", err);
+        process.exit(1);
     }
 }
 

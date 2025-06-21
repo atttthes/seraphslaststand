@@ -11,7 +11,6 @@
 </head>
 <body>
     <canvas id="backgroundCanvas"></canvas>
-
     <div id="mainMenu">
         <h1>Neon Outbreak</h1>
         <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
@@ -34,25 +33,27 @@
                     <span>EXP</span>
                     <div id="expBar"></div>
                 </div>
-                <div id="waveInfo">Horda: 0</div>
             </div>
             
             <div id="timer">Tempo: 0s</div>
 
             <div id="gameControls">
+                <div id="waveInfo">Horda: 0</div>
                 <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
                 <button id="quitBtn" title="Sair do Jogo">Sair</button>
             </div>
         </div>
 
+        <!-- Controles de Habilidade -->
+        <div id="abilityControls">
+            <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
+        </div>
+
         <!-- Controles Touch -->
         <div id="touchControls">
-            <div id="actionControls">
-                 <button id="totalReactionBtn" style="display: none;">Reação</button>
-                 <div id="moveControlsContainer">
-                    <button id="touchLeft" class="touch-move-btn">◀</button>
-                    <button id="touchRight" class="touch-move-btn">▶</button>
-                </div>
+            <div id="moveControlsContainer">
+                <button id="touchLeft" class="touch-move-btn">◀</button>
+                <button id="touchRight" class="touch-move-btn">▶</button>
             </div>
             <div id="aimJoystick" class="joystick-container">
                 <div id="aimJoystickKnob" class="joystick-knob"></div>
@@ -77,7 +78,7 @@
             <h2>Subiu de Nível!</h2>
             <p>Escolha uma melhoria:</p>
             <div id="upgradeOptions"></div>
-            <button id="rerollUpgradesBtn">Rerolar Opções (1)</button>
+            <button id="rerollUpgradesBtn">Trocar Opções (1/1)</button>
         </div>
     </div>
     

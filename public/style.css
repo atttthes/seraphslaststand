@@ -28,7 +28,7 @@ body, html {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -1; /* Fica atrás de todo o conteúdo */
+    z-index: -1;
 }
 
 /* --- Animação do Menu --- */
@@ -44,8 +44,7 @@ body, html {
     gap: 15px;
     animation: floatAnimation 6s ease-in-out infinite;
     padding: 20px;
-    z-index: 10;
-    background: none; /* Fundo transparente para ver o canvas */
+    z-index: 1; /* Para ficar sobre o canvas de fundo */
 }
 
 #mainMenu h1 {
@@ -96,7 +95,7 @@ body, html {
     display: block;
     width: 100%;
     height: 100%;
-    background-color: transparent; /* Fundo do canvas do jogo transparente */
+    background-color: transparent; /* Alterado para transparente */
 }
 
 /* UI do Jogo (REESTRUTURADA COM GRID) */
@@ -106,10 +105,10 @@ body, html {
     left: 0;
     width: 100%;
     box-sizing: border-box;
-    padding: 15px;
+    padding: 15px; /* Aumentado padding vertical */
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: start; /* Alinhado ao topo */
+    grid-template-columns: 1fr auto 1fr; /* Colunas para esquerda, centro, direita */
+    align-items: center;
     gap: 10px;
     z-index: 10;
     pointer-events: none;
@@ -122,33 +121,30 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    justify-self: start;
-}
-#waveInfo {
-    margin-top: 8px;
-    padding: 5px;
-    font-size: clamp(1em, 3vw, 1.4em);
-    text-align: left;
-    border: 2px solid var(--neon-green);
-    background-color: rgba(0, 255, 127, 0.05);
+    font-size: clamp(1em, 2.5vw, 1.2em);
+    justify-self: start; /* Alinha na esquerda da sua coluna do grid */
 }
 
 #timer {
     font-size: clamp(1.8em, 5vw, 2.2em);
     font-weight: bold;
     text-shadow: 0 0 8px var(--neon-green);
-    justify-self: center;
+    justify-self: center; /* Alinha no centro da sua coluna do grid */
 }
 
 #gameControls {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    flex-direction: column; /* Empilha para melhor alinhamento */
+    align-items: flex-end; /* Alinha items à direita */
     gap: 10px;
     text-align: right;
-    justify-self: end;
+    justify-self: end; /* Alinha na direita da sua coluna do grid */
 }
-
+#waveInfo {
+    color: white;
+    text-shadow: 0 0 5px var(--neon-green);
+    font-size: clamp(1em, 3vw, 1.5em);
+}
 #gameControls button {
     font-family: var(--main-font);
     font-size: clamp(1em, 3vw, 1.5em);
@@ -182,6 +178,41 @@ body, html {
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
 
+/* --- Botão de Habilidade --- */
+#abilityControls {
+    position: absolute;
+    bottom: 150px; /* Acima dos controles de movimento */
+    left: 20px;
+    z-index: 50;
+    pointer-events: all;
+}
+
+.ability-btn {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 3px solid #FFF;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #FFF;
+    font-size: 2.5em;
+    cursor: pointer;
+    text-shadow: 0 0 10px #FFF, 0 0 20px #FFF;
+    transition: all 0.3s;
+}
+
+.ability-btn:not([disabled]):hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px #FFF;
+}
+
+.ability-btn:disabled {
+    border-color: #555;
+    background-color: rgba(85, 85, 85, 0.2);
+    color: #555;
+    cursor: not-allowed;
+    text-shadow: none;
+}
+
 
 /* --- Controles Touch --- */
 #touchControls { display: none; }
@@ -198,36 +229,11 @@ body, html {
         z-index: 50;
         pointer-events: none;
     }
-    
-    #actionControls {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 15px;
-    }
 
     #moveControlsContainer {
         display: flex;
         gap: 20px;
         pointer-events: all;
-    }
-
-    #totalReactionBtn {
-        width: 100px; height: 50px;
-        background-color: rgba(255, 255, 255, 0.1);
-        border: 2px solid white; color: white;
-        font-size: 1.5em; font-family: var(--main-font); border-radius: 10px;
-        display: flex; justify-content: center; align-items: center; user-select: none;
-        pointer-events: all;
-        cursor: pointer;
-    }
-    #totalReactionBtn:disabled {
-        background-color: rgba(128, 128, 128, 0.1);
-        border-color: grey; color: grey;
-        cursor: not-allowed;
-    }
-    #totalReactionBtn:active:not(:disabled) {
-        background-color: rgba(255, 255, 255, 0.4);
     }
 
     .touch-move-btn {
@@ -266,6 +272,9 @@ body, html {
     box-shadow: 0 0 15px var(--neon-green);
     text-align: center; min-width: 300px;
     max-width: 90%; font-size: 1.5em;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 .modal-content h2 { margin-top: 0; font-size: 2em; text-shadow: 0 0 8px var(--neon-green); }
 .modal-content button {
@@ -274,13 +283,14 @@ body, html {
     cursor: pointer; border: 2px solid var(--neon-green);
     background-color: transparent; color: var(--neon-green);
 }
-.modal-content button:hover:not(:disabled) { background-color: var(--neon-green); color: var(--dark-bg); }
+.modal-content button:hover:not([disabled]) { background-color: var(--neon-green); color: var(--dark-bg); }
 .modal-content button:disabled {
-    border-color: grey;
-    color: grey;
+    border-color: #555;
+    color: #555;
     cursor: not-allowed;
 }
-#upgradeOptions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+
+#upgradeOptions { display: flex; flex-direction: column; gap: 10px; }
 #upgradeOptions .upgrade-card { border: 2px solid var(--neon-green); padding: 15px; cursor: pointer; transition: all 0.2s; }
 #upgradeOptions .upgrade-card:hover { background-color: var(--neon-green); color: var(--dark-bg); }
 .upgrade-card h3 { margin: 0 0 5px 0; font-size: 1.2em; }
