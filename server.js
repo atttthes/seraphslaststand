@@ -15,9 +15,13 @@ const PORT = process.env.PORT || 10000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// Servir o index.html a partir do diretório raiz do projeto, não de 'public'
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+// Servir os arquivos estáticos (js, css) do diretório raiz
+app.use(express.static(__dirname));
 
 // --- API para o Ranking ---
 app.get('/api/ranking', async (req, res) => {
@@ -66,7 +70,7 @@ const WAVE_CONFIG = [
     { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
 ];
 const BOSS_CONFIG = {
-    color: '#FFFFFF', hp: 1600, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
+    color: '#FFFFFF', hp: 1040, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
 };
 const RICOCHET_CONFIG = { 
     color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
@@ -74,19 +78,40 @@ const RICOCHET_CONFIG = {
 const WAVE_INTERVAL_SECONDS = 15;
 
 // --- Função para escalar dificuldade ---
+function getScalingFactor(wave) {
+    if (wave <= 1) return 1.0;
+    // Aumento de 10% por horda após a primeira, com um teto de 50% de bônus (atingido na horda 6)
+    return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
+}
+
 function getWaveConfig(wave) {
     const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
-    const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1);
-    return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) };
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...baseConfig, 
+        hp: Math.floor(baseConfig.hp * scalingFactor), 
+        damage: Math.floor(baseConfig.damage * scalingFactor), 
+        projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) 
+    };
 }
+
 function getBossConfig(wave) {
-    const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
-    const baseHp = BOSS_CONFIG.hp; // Usa o HP já reduzido (1600) como base
-    return { ...BOSS_CONFIG, hp: Math.floor(baseHp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...BOSS_CONFIG, 
+        hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), 
+        damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), 
+        projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) 
+    };
 }
+
 function getRicochetConfig(wave) {
-    const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.12);
-    return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) };
+    const scalingFactor = getScalingFactor(wave);
+    return { 
+        ...RICOCHET_CONFIG, 
+        hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), 
+        projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) 
+    };
 }
 
 function findOrCreateRoom() {
@@ -171,27 +196,20 @@ setInterval(() => {
                     room.wave++; room.waveState = 'active';
                     const waveConfig = getWaveConfig(room.wave);
                     
-                    // Inimigos Normais: Inicia com 3, +1 por horda
                     const normalEnemyCount = room.wave + 2;
                     for (let i = 0; i < normalEnemyCount; i++) {
-                        setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250); // Stagger spawn
+                        setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250);
                     }
-
-                    // Snipers: Inicia na horda 3 com 1, +2 por horda subsequente
                     if (room.wave >= 3) {
                         const sniperCount = 1 + (room.wave - 3) * 2;
                         for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig);
                     }
-                    
-                    // Ricochets: Inicia na horda 4, aparece a cada 3 hordas, +1 a cada aparição
                     if (room.wave >= 4 && (room.wave - 4) % 3 === 0) {
                         const ricochetCount = Math.floor((room.wave - 4) / 3) + 1;
                         for (let i = 0; i < ricochetCount; i++) spawnRicochet(room, room.wave);
                     }
-
-                    // Chefes: Inicia na horda 5, aparece a cada 2 hordas, +1 a cada aparição
-                    if (room.wave >= 5 && (room.wave - 5) % 2 === 0) {
-                        const bossCount = Math.floor((room.wave - 5) / 2) + 1;
+                    if (room.wave >= 6 && (room.wave - 6) % 2 === 0) { // Aparição a partir da horda 6
+                        const bossCount = Math.floor((room.wave - 6) / 2) + 1;
                         for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave);
                     }
 
@@ -208,42 +226,30 @@ setInterval(() => {
         const LIGHTNING_DAMAGE = WAVE_CONFIG[0].hp; // 120
         const LIGHTNING_VISUAL_DURATION_TICKS = 30; // 0.5s
 
-        // Remove raios antigos (apenas o efeito visual)
         room.lightningStrikes = room.lightningStrikes.filter(strike => 
             room.gameTime < strike.creationTime + LIGHTNING_VISUAL_DURATION_TICKS
         );
         
-        // Gera novos raios
         if (room.gameTime > 1 && room.gameTime % LIGHTNING_INTERVAL_TICKS === 0) {
             const lightningPlayers = playerList.filter(p => p.hasLightning);
             lightningPlayers.forEach(player => {
                 for (let i = 0; i < 3; i++) {
                     const strikeX = Math.random() * LOGICAL_WIDTH;
-                    const strikeWidth = 40 * 1.2; // Largura do player (40) * 1.2
-
-                    // Adiciona o objeto do raio para os clientes renderizarem
+                    const strikeWidth = 40 * 1.2;
                     room.lightningStrikes.push({
-                        id: `strike_${Date.now()}_${Math.random()}`,
-                        x: strikeX,
-                        width: strikeWidth,
-                        creationTime: room.gameTime,
+                        id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime,
                     });
-
-                    // Aplica o dano instantaneamente nos inimigos na trajetória
                     room.enemies.forEach(enemy => {
-                        // Checa colisão simples no eixo X
                         if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) {
                             enemy.hp -= LIGHTNING_DAMAGE;
                         }
                     });
                 }
-
-                // Após todos os raios de um jogador caírem, checa por inimigos mortos
                 room.enemies = room.enemies.filter(enemy => {
                     if (enemy.hp <= 0) {
                         const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                         io.to(room.name).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain });
-                        return false; // Remove o inimigo da lista
+                        return false;
                     }
                     return true;
                 });
@@ -268,7 +274,7 @@ setInterval(() => {
             } else {
                 canShoot = true;
                 const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
-                if (targetPlayer && !enemy.isRicochet) { // Inimigos normais seguem o jogador
+                if (targetPlayer && !enemy.isRicochet) {
                      const moveDirection = Math.sign(targetPlayer.x - enemy.x);
                      enemy.x += moveDirection * patrolSpeed;
                 }
@@ -281,27 +287,25 @@ setInterval(() => {
             if (enemy.x < 0) enemy.x = 0;
             if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
             
-            // Lógica de Disparo
             const now = Date.now();
             if (canShoot && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
-                if (enemy.isRicochet) {
+                if (enemy.isRicochet && targetPlayer) {
                     enemy.lastShotTime = now;
-                    for (let i = 0; i < 2; i++) { // Dispara duas vezes
-                        setTimeout(() => {
-                            if (!rooms[roomName]) return;
-                            // Atira na parede oposta à sua posição para garantir o ricochete
-                            const targetX = (enemy.x < LOGICAL_WIDTH / 2) ? LOGICAL_WIDTH : 0;
-                            const targetY = enemy.y + 300 + Math.random() * 200;
-                            const baseAngle = Math.atan2(targetY - (enemy.y + enemy.height / 2), targetX - (enemy.x + enemy.width / 2));
-                            const finalAngle = baseAngle + (Math.PI / 6); // Ajuste de 30 graus para baixo
-                            room.enemyProjectiles.push({
-                                id: `ep_${Date.now()}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
-                                vx: Math.cos(finalAngle) * 8, vy: Math.sin(finalAngle) * 8,
-                                damage: enemy.projectileDamage, color: enemy.color,
-                                canRicochet: true, bouncesLeft: 1
-                            });
-                        }, i * 200);
-                    }
+                    // IA de Ricochete: Calcula tiro na parede para acertar o jogador "virtual"
+                    const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
+                    const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
+                    const virtualPlayerY = targetPlayer.y;
+
+                    const angle = Math.atan2(
+                        (virtualPlayerY + 30) - (enemy.y + enemy.height / 2), 
+                        (virtualPlayerX + 20) - (enemy.x + enemy.width / 2)
+                    );
+                    room.enemyProjectiles.push({
+                        id: `ep_${Date.now()}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
+                        vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8,
+                        damage: enemy.projectileDamage, color: enemy.color,
+                        canRicochet: true, bouncesLeft: 1
+                    });
                 } else if (targetPlayer) {
                     enemy.lastShotTime = now;
                     const angle = Math.atan2((targetPlayer.y + 30) - (enemy.y + enemy.height / 2), (targetPlayer.x + 20) - (enemy.x + enemy.width / 2));
@@ -318,12 +322,11 @@ setInterval(() => {
         for (let i = room.enemyProjectiles.length - 1; i >= 0; i--) {
             const p = room.enemyProjectiles[i];
             
-            // Lógica de Ricochete
             if (p.canRicochet && p.bouncesLeft > 0) {
                 if (p.x <= 0 || p.x >= LOGICAL_WIDTH) {
                     p.vx *= -1;
                     p.bouncesLeft--;
-                    p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1; // Previne ficar preso
+                    p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH - 1;
                 }
             }
             
@@ -362,7 +365,7 @@ io.on('connection', (socket) => {
             ...playerData, 
             hasAlly: false, 
             allyCooldownWave: 0,
-            hasLightning: false // Estado do Raio
+            hasLightning: false 
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });

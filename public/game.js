@@ -79,26 +79,46 @@ document.addEventListener('DOMContentLoaded', () => {
         shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
     };
     const BOSS_CONFIG = {
-        color: '#FFFFFF', hp: 1600, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        color: '#FFFFFF', hp: 1040, speed: 1.2, horizontalSpeed: 0.8, damage: 50, // HP reduzido em 35% (de 1600)
         projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 15 * 60;
 
     // --- Funções de escalonamento para SP ---
+    function getSPScalingFactor(wave) {
+        if (wave <= 1) return 1.0;
+        // Aumento de 10% por horda após a primeira, com um teto de 50% de bônus (atingido na horda 6)
+        return 1.0 + Math.min(0.5, (wave - 1) * 0.1);
+    }
+    
     function getSPWaveConfig(wave) {
         const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1];
-        const scalingFactor = 1 + (Math.max(0, wave - WAVE_CONFIG.length) * 0.1);
-        return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) };
+        const scalingFactor = getSPScalingFactor(wave);
+        return { 
+            ...baseConfig, 
+            hp: Math.floor(baseConfig.hp * scalingFactor), 
+            damage: Math.floor(baseConfig.damage * scalingFactor), 
+            projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) 
+        };
     }
+    
     function getSPRicochetConfig(wave) {
-        const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.12);
-        return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) };
+        const scalingFactor = getSPScalingFactor(wave);
+        return { 
+            ...RICOCHET_CONFIG, 
+            hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), 
+            projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) 
+        };
     }
+    
     function getSPBossConfig(wave) {
-        const scalingFactor = 1 + (Math.max(0, wave - 4) * 0.15);
-        // Aplica a redução base de 60% e depois escala
-        const baseHp = BOSS_CONFIG.hp; // Já está em 1600
-        return { ...BOSS_CONFIG, hp: Math.floor(baseHp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) };
+        const scalingFactor = getSPScalingFactor(wave);
+        return { 
+            ...BOSS_CONFIG, 
+            hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), 
+            damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), 
+            projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) 
+        };
     }
 
 
@@ -294,8 +314,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         draw() {
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, this.width, this.height);
+            // Desenha o contorno neon
+            ctx.save();
+            ctx.strokeStyle = this.color;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 15;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+            ctx.restore();
+
+            // Barra de vida
             const hpRatio = this.hp / this.maxHp;
             ctx.fillStyle = '#555';
             ctx.fillRect(this.x, this.y - 10, this.width, 5);
@@ -619,8 +647,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Chefes
-                if (spState.wave >= 5 && (spState.wave - 5) % 2 === 0) {
-                    const bossCount = Math.floor((spState.wave - 5) / 2) + 1;
+                if (spState.wave >= 6 && (spState.wave - 6) % 2 === 0) { // Aparição a partir da horda 6
+                    const bossCount = Math.floor((spState.wave - 6) / 2) + 1;
                     const bossConfigBase = getSPBossConfig(spState.wave);
                     for (let i = 0; i < bossCount; i++) {
                         const bossConfig = {
@@ -641,17 +669,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) {
                 enemy.lastShotTime = now;
                 if (enemy.isRicochet) {
-                    for (let i = 0; i < 2; i++) {
-                        setTimeout(() => {
-                            const targetX = (enemy.x < canvas.width / 2) ? canvas.width : 0;
-                            const targetY = enemy.y + 300 + Math.random() * 200;
-                            const baseAngle = Math.atan2(targetY - (enemy.y + enemy.height / 2), targetX - (enemy.x + enemy.width / 2));
-                            const finalAngle = baseAngle + (Math.PI / 6); // Atira para baixo, em direção à parede
-                            const proj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, finalAngle, 8, enemy.projectileDamage, enemy.color, 'enemy');
-                            proj.canRicochet = true; proj.bouncesLeft = 1;
-                            enemyProjectiles.push(proj);
-                        }, i * 200);
-                    }
+                    // IA de Ricochete: Calcula o tiro na parede para acertar o jogador
+                    const wallX = (player.x > enemy.x) ? canvas.width : 0;
+                    const virtualPlayerX = (wallX === 0) ? -player.x : (2 * canvas.width - player.x);
+                    const virtualPlayerY = player.y;
+
+                    const angle = Math.atan2(
+                        (virtualPlayerY + player.height / 2) - (enemy.y + enemy.height / 2),
+                        (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2)
+                    );
+
+                    const proj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 8, enemy.projectileDamage, enemy.color, 'enemy');
+                    proj.canRicochet = true; proj.bouncesLeft = 1;
+                    enemyProjectiles.push(proj);
+
                 } else {
                     const angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
                     enemyProjectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, 5, enemy.projectileDamage, enemy.color, 'enemy'));
@@ -669,6 +700,29 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawBackground();
         
+        // --- Auxílio de Mira (Rastro) ---
+        const isAiming = (aimStick.active || mouse.down);
+        if (!isPaused && isAiming && player) {
+            let currentAimAngle;
+            if (aimStick.active) {
+                currentAimAngle = aimStick.angle;
+            } else { // mouse.down
+                currentAimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
+            }
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
+            // Projeta a linha para bem longe
+            ctx.lineTo(
+                player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000,
+                player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000
+            );
+            ctx.strokeStyle = 'rgba(0, 255, 127, 0.1)'; // 10% de opacidade
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
         if (!isMultiplayer) {
             updateSinglePlayerLogic();
         } else if (socket) {
