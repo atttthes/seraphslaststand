@@ -18,6 +18,9 @@ body, html {
     background-color: var(--dark-bg);
     font-family: var(--main-font);
     color: var(--neon-green);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 #backgroundCanvas {
@@ -27,17 +30,6 @@ body, html {
     width: 100%;
     height: 100%;
     z-index: -1;
-}
-
-/* --- Wrapper do App (NOVO) --- */
-#app-wrapper {
-    display: none; /* Escondido por padrão, mostrado via JS */
-    width: 100%;
-    height: 100%;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
 }
 
 /* --- Animação do Menu --- */
@@ -53,9 +45,7 @@ body, html {
     gap: 15px;
     animation: floatAnimation 6s ease-in-out infinite;
     padding: 20px;
-    z-index: 1;
-    height: 100%;
-    justify-content: center;
+    z-index: 1; 
 }
 
 #mainMenu h1 {
@@ -74,7 +64,7 @@ body, html {
     cursor: pointer;
     transition: all 0.3s ease;
     width: 100%;
-    max-width: 350px;
+    max-width: 450px; /* Aumentado para paisagem */
     text-align: center;
     font-family: var(--main-font);
     box-sizing: border-box;
@@ -89,17 +79,30 @@ body, html {
     transform: scale(1.08) translateY(-3px);
 }
 
-/* --- Container do Jogo Responsivo (ATUALIZADO) --- */
+/* --- Estrutura do Jogo e Controles --- */
+#app-wrapper {
+    display: none; /* Inicia escondido */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    gap: 15px; /* Espaço entre o jogo e os controles */
+    box-sizing: border-box;
+    padding: 10px;
+}
+
 #gameContainer {
     position: relative;
     border: 2px solid var(--neon-green);
     box-shadow: 0 0 10px var(--neon-green) inset;
     
-    /* Mantém a proporção e limita o tamanho à janela (ATUALIZADO para paisagem) */
+    /* Proporção 16:9, centralizado e responsivo */
     aspect-ratio: 16 / 9;
-    width: 100%;
+    width: auto;
+    height: auto;
     max-width: 95vw;
-    max-height: calc(100vh - 120px); /* Deixa espaço para controles em mobile */
+    max-height: 80vh; /* Deixa espaço para controles abaixo */
 }
 
 #gameCanvas {
@@ -109,11 +112,10 @@ body, html {
     background-color: transparent;
 }
 
-/* UI do Jogo (REESTRUTURADA COM GRID) */
+/* UI do Jogo (Sobreposta ao Canvas) */
 #topBar {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 0; left: 0;
     width: 100%;
     box-sizing: border-box;
     padding: 15px;
@@ -124,20 +126,18 @@ body, html {
     z-index: 10;
     pointer-events: none;
 }
-#topBar > * {
-    pointer-events: all;
-}
+#topBar > * { pointer-events: all; }
 
 #ui {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    font-size: clamp(1em, 2.5vw, 1.2em);
+    font-size: clamp(0.8em, 1.5vw, 1.2em); /* Ajuste de fonte para 16:9 */
     justify-self: start;
 }
 
 #timer {
-    font-size: clamp(1.8em, 5vw, 2.2em);
+    font-size: clamp(1.5em, 2.5vw, 2.2em);
     font-weight: bold;
     text-shadow: 0 0 8px var(--neon-green);
     justify-self: center;
@@ -145,7 +145,6 @@ body, html {
 
 #gameControls {
     display: flex;
-    flex-direction: column;
     align-items: flex-end;
     gap: 10px;
     text-align: right;
@@ -154,139 +153,105 @@ body, html {
 #waveInfo {
     color: white;
     text-shadow: 0 0 5px var(--neon-green);
-    font-size: clamp(1em, 3vw, 1.5em);
+    font-size: clamp(1em, 1.8vw, 1.5em);
 }
 #gameControls button {
     font-family: var(--main-font);
-    font-size: clamp(1em, 3vw, 1.5em);
+    font-size: clamp(1em, 1.5vw, 1.5em);
     padding: 5px 10px;
     border: 2px solid var(--neon-green);
     background-color: var(--dark-bg);
     color: var(--neon-green);
     cursor: pointer;
 }
-#gameControls button:hover {
-    background-color: var(--neon-green);
-    color: var(--dark-bg);
-}
+#gameControls button:hover { background-color: var(--neon-green); color: var(--dark-bg); }
 
 #hpBarContainer, #expBarContainer, #shieldBarContainer {
     border: 2px solid var(--neon-green);
     padding: 5px;
-    width: clamp(120px, 15vw, 180px); /* Ajustado para tela mais larga */
-    height: clamp(18px, 3vh, 22px);
+    width: clamp(150px, 18vw, 220px);
+    height: clamp(18px, 2vh, 22px);
     background-color: rgba(0, 255, 127, 0.05);
     position: relative;
 }
 #hpBarContainer > span, #expBarContainer > span, #shieldBarContainer > span {
     color: var(--neon-green);
     position: absolute;
-    top: 50%;
-    left: 5px;
+    top: 50%; left: 8px;
     transform: translateY(-50%);
 }
 #hpBar, #expBar, #shieldBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
-
 #shieldBarContainer { border-color: var(--neon-cyan); background-color: rgba(0, 255, 255, 0.05); }
 #shieldBarContainer > span { color: var(--neon-cyan); }
 #shieldBar { background-color: var(--neon-cyan); width: 100%; }
 
-/* --- Botão de Habilidade e Pulo --- */
-#abilityControls {
-    display: flex;
-    flex-direction: row;
-    gap: 15px;
-    pointer-events: all;
-}
-
-.ability-btn {
-    width: 60px; height: 60px;
-    border-radius: 50%;
-    border: 3px solid #FFF;
-    background-color: rgba(255, 255, 255, 0.2);
-    color: #FFF;
-    font-size: 2.2em;
-    cursor: pointer;
-    text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
-    transition: all 0.3s;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.ability-btn:not([disabled]):hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 20px #FFF;
-}
-
-.ability-btn:disabled {
-    border-color: #555;
-    background-color: rgba(85, 85, 85, 0.2);
-    color: #555;
-    cursor: not-allowed;
-    text-shadow: none;
-}
-
-
-/* --- Controles Touch (REESTRUTURADO) --- */
-#touchControls { display: none; }
-#left-controls, #right-controls {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
+/* --- Controles Touch --- */
+#touchControls { display: none; } /* Escondido por padrão */
 
 @media (hover: none) and (pointer: coarse) {
-    #app-wrapper {
-        justify-content: space-between; /* Empurra o jogo para cima e os controles para baixo */
-    }
-
-    #gameContainer {
-        max-height: calc(100vh - 140px); /* Reduz a altura máxima para garantir espaço para os controles */
-    }
-
     #touchControls {
         display: flex;
+        position: relative; /* Posicionado pelo app-wrapper */
         width: 100%;
+        max-width: 95vw;
         justify-content: space-between;
-        align-items: center;
-        padding: 10px 20px;
+        align-items: flex-end;
         box-sizing: border-box;
-        pointer-events: none; /* O container não recebe eventos, só os filhos */
-        height: 120px;
+        z-index: 50;
+        pointer-events: none;
     }
     
-    #moveControlsContainer {
+    #left-controls, #right-controls {
         display: flex;
+        align-items: flex-end;
         gap: 20px;
         pointer-events: all;
     }
 
+    #moveControlsContainer { display: flex; gap: 20px; }
+    
     .touch-move-btn {
         width: 70px; height: 70px;
         background-color: rgba(0, 255, 127, 0.15);
         border: 2px solid var(--neon-green); color: var(--neon-green);
-        font-size: 2.5em; font-family: var(--main-font); border-radius: 50%;
+        font-size: 2em; font-family: var(--main-font); border-radius: 50%;
         display: flex; justify-content: center; align-items: center; user-select: none;
     }
     .touch-move-btn:active { background-color: rgba(0, 255, 127, 0.4); }
+
+    #abilityControls { display: flex; flex-direction: column-reverse; gap: 10px; }
+    
+    .ability-btn {
+        width: 65px; height: 65px;
+        border-radius: 50%;
+        border: 3px solid #FFF;
+        background-color: rgba(255, 255, 255, 0.2);
+        color: #FFF; font-size: 2em; cursor: pointer;
+        text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
+        transition: all 0.3s;
+        display: flex; justify-content: center; align-items: center;
+    }
+    .ability-btn:disabled {
+        border-color: #555; background-color: rgba(85, 85, 85, 0.2);
+        color: #555; cursor: not-allowed; text-shadow: none;
+    }
     
     .joystick-container {
-        width: 100px; height: 100px;
+        width: 110px; height: 110px;
         background-color: rgba(0, 255, 127, 0.1);
         border: 2px solid var(--neon-green); border-radius: 50%;
-        position: relative; pointer-events: all;
+        position: relative;
     }
     .joystick-knob {
-        width: 50px; height: 50px;
+        width: 55px; height: 55px;
         background-color: rgba(0, 255, 127, 0.3); border-radius: 50%;
-        position: absolute; top: 25px; left: 25px; transition: transform 0.1s;
+        position: absolute; top: 27.5px; left: 27.5px; transition: transform 0.1s;
     }
 }
 
-/* Modais */
+/* Modais (sem grandes alterações) */
 .modal {
     position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
     background-color: rgba(0,0,0,0.8);
@@ -295,14 +260,11 @@ body, html {
 }
 .modal-content {
     background-color: var(--dark-secondary);
-    padding: 30px;
-    border: 2px solid var(--neon-green);
+    padding: 30px; border: 2px solid var(--neon-green);
     box-shadow: 0 0 15px var(--neon-green);
     text-align: center; min-width: 300px;
-    max-width: 90%; font-size: 1.5em;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
+    max-width: 90%; max-height: 90vh; overflow-y: auto;
+    font-size: 1.5em; display: flex; flex-direction: column; gap: 15px;
 }
 .modal-content h2 { margin-top: 0; font-size: 2em; text-shadow: 0 0 8px var(--neon-green); }
 .modal-content button {
@@ -312,11 +274,7 @@ body, html {
     background-color: transparent; color: var(--neon-green);
 }
 .modal-content button:hover:not([disabled]) { background-color: var(--neon-green); color: var(--dark-bg); }
-.modal-content button:disabled {
-    border-color: #555;
-    color: #555;
-    cursor: not-allowed;
-}
+.modal-content button:disabled { border-color: #555; color: #555; cursor: not-allowed; }
 
 #upgradeOptions { display: flex; flex-direction: column; gap: 10px; }
 #upgradeOptions .upgrade-card { border: 2px solid var(--neon-green); padding: 15px; cursor: pointer; transition: all 0.2s; }
@@ -324,7 +282,6 @@ body, html {
 .upgrade-card h3 { margin: 0 0 5px 0; font-size: 1.2em; }
 .upgrade-card p { margin: 0; font-size: 0.9em; }
 
-/* Ranking Table */
 #rankingTable { width: 100%; border-collapse: collapse; margin-top: 20px; }
 #rankingTable th, #rankingTable td { padding: 8px 12px; border: 1px solid var(--neon-green); }
 #rankingTable th { background-color: rgba(0, 255, 127, 0.2); }
