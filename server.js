@@ -61,21 +61,23 @@ const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3;
 const RICOCHET_LINE_Y = 180;
 const SNIPER_LINE_Y = 80;
 
-// --- Configurações das Hordas e Inimigos ---
+// --- Configurações das Hordas e Inimigos (ATUALIZADO) ---
+// Todos os cooldowns aumentados em 20% (multiplicados por 1.2)
+// Inimigo padrão sempre vermelho
 const WAVE_CONFIG = [
-    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 },
-    { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 },
-    { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 },
-    { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
-    { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
+    { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+    { color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+    { color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+    { color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+    { color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
 ];
 const BOSS_CONFIG = {
-    color: '#FFFFFF', hp: 1040, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
+    color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true
 };
 const RICOCHET_CONFIG = { 
-    color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
+    color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 35, height: 35 
 };
-const WAVE_INTERVAL_SECONDS = 15;
+const WAVE_INTERVAL_SECONDS = 10; // Reduzido de 15 para 10
 
 // --- Função para escalar dificuldade ---
 function getScalingFactor(wave) {
@@ -147,7 +149,7 @@ function spawnSniper(room, waveConfig) {
         width: 25, height: 50, color: '#00FFFF',
         hp: waveConfig.hp * 0.8, speed: 1.0, horizontalSpeed: 0.5,
         damage: waveConfig.damage * 0.5, projectileDamage: waveConfig.projectileDamage * 1.15,
-        shootCooldown: waveConfig.shootCooldown * 1.30,
+        shootCooldown: waveConfig.shootCooldown * 1.30 * 1.2, // Aumento de 20%
         isSniper: true, maxHp: waveConfig.hp * 0.8, lastShotTime: 0,
         patrolOriginX: null, reachedPosition: false,
     });
@@ -188,7 +190,7 @@ setInterval(() => {
 
         room.gameTime++;
 
-        // LÓGICA DE HORDAS
+        // LÓGICA DE HORDAS (ATUALIZADA)
         if (room.gameTime > 1 && room.gameTime % 60 === 0) {
             if (room.waveState === 'intermission') {
                 room.waveTimer--;
@@ -196,20 +198,24 @@ setInterval(() => {
                     room.wave++; room.waveState = 'active';
                     const waveConfig = getWaveConfig(room.wave);
                     
-                    const normalEnemyCount = room.wave + 2;
+                    // Inimigos padrão: Começa com 2, +1 a cada horda
+                    const normalEnemyCount = room.wave + 1; 
                     for (let i = 0; i < normalEnemyCount; i++) {
                         setTimeout(() => { if (rooms[roomName]) spawnEnemy(room, waveConfig); }, i * 250);
                     }
+                    // Snipers: Mantém a lógica original
                     if (room.wave >= 3) {
                         const sniperCount = 1 + (room.wave - 3) * 2;
                         for (let i = 0; i < sniperCount; i++) spawnSniper(room, waveConfig);
                     }
-                    if (room.wave >= 4 && (room.wave - 4) % 3 === 0) {
-                        const ricochetCount = Math.floor((room.wave - 4) / 3) + 1;
+                    // Ricochets: A partir da horda 7, a cada 2 hordas
+                    if (room.wave >= 7 && (room.wave - 7) % 2 === 0) {
+                        const ricochetCount = Math.floor((room.wave - 7) / 2) + 1;
                         for (let i = 0; i < ricochetCount; i++) spawnRicochet(room, room.wave);
                     }
-                    if (room.wave >= 6 && (room.wave - 6) % 2 === 0) { // Aparição a partir da horda 6
-                        const bossCount = Math.floor((room.wave - 6) / 2) + 1;
+                    // Boss: A partir da horda 10, a cada 3 hordas
+                    if (room.wave >= 10 && (room.wave - 10) % 3 === 0) {
+                        const bossCount = Math.floor((room.wave - 10) / 3) + 1;
                         for (let i = 0; i < bossCount; i++) spawnBoss(room, room.wave);
                     }
 

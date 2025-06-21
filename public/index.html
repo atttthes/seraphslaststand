@@ -22,27 +22,29 @@
     <div id="gameContainer" style="display: none;">
         <canvas id="gameCanvas"></canvas>
 
-        <!-- UI do Jogo -->
-        <div id="ui">
-            <div id="hpBarContainer">
-                <span>HP</span>
-                <div id="hpBar"></div>
+        <!-- UI do Jogo (REESTRUTURADA) -->
+        <div id="topBar">
+            <div id="ui">
+                <div id="hpBarContainer">
+                    <span>HP</span>
+                    <div id="hpBar"></div>
+                </div>
+                <div id="expBarContainer">
+                    <span>EXP</span>
+                    <div id="expBar"></div>
+                </div>
             </div>
-            <div id="expBarContainer">
-                <span>EXP</span>
-                <div id="expBar"></div>
+            
+            <div id="timer">Tempo: 0s</div>
+
+            <div id="gameControls">
+                <div id="waveInfo">Horda: 0</div>
+                <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
+                <button id="quitBtn" title="Sair do Jogo">Sair</button>
             </div>
-            <div id="waveInfo">Horda: 0</div>
-        </div>
-        
-        <div id="gameControls">
-             <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
-             <button id="quitBtn" title="Sair do Jogo">Sair</button>
         </div>
 
-        <div id="timer">Tempo: 0s</div>
-
-        <!-- Controles Touch (ATUALIZADOS) -->
+        <!-- Controles Touch -->
         <div id="touchControls">
             <div id="moveControlsContainer">
                 <button id="touchLeft" class="touch-move-btn">◀</button>

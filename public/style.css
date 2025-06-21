@@ -88,30 +88,41 @@ body, html {
     background-color: var(--dark-bg);
 }
 
-/* UI do Jogo */
-#ui {
+/* UI do Jogo (REESTRUTURADA) */
+#topBar {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+    pointer-events: none;
+}
+#topBar > * {
+    pointer-events: all;
+}
+
+#ui {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    pointer-events: none;
-    z-index: 10;
-    font-size: clamp(1.2em, 3vw, 1.5em);
+    font-size: clamp(1em, 2.5vw, 1.2em);
+}
+
+#gameControls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: right;
 }
 #waveInfo {
     color: white;
     text-shadow: 0 0 5px var(--neon-green);
-}
-
-#gameControls {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    display: flex;
-    gap: 10px;
-    z-index: 10;
+    font-size: clamp(1em, 3vw, 1.5em);
 }
 #gameControls button {
     font-family: var(--main-font);
@@ -130,28 +141,27 @@ body, html {
 #hpBarContainer, #expBarContainer {
     border: 2px solid var(--neon-green);
     padding: 5px;
-    width: clamp(150px, 30vw, 200px);
-    height: clamp(20px, 4vh, 25px);
+    width: clamp(120px, 25vw, 180px);
+    height: clamp(18px, 3vh, 22px);
     background-color: rgba(0, 255, 127, 0.05);
+    position: relative;
 }
 #hpBarContainer > span, #expBarContainer > span {
     color: var(--neon-green);
     position: absolute;
-    margin-top: -2px;
-    margin-left: 5px;
+    top: 50%;
+    left: 5px;
+    transform: translateY(-50%);
 }
 #hpBar, #expBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
 
 #timer {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: clamp(2em, 6vw, 2.5em);
+    font-size: clamp(1.8em, 5vw, 2.2em);
     font-weight: bold;
     text-shadow: 0 0 8px var(--neon-green);
+    text-align: center;
 }
 
 /* --- Controles Touch (ATUALIZADOS) --- */

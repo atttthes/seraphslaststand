@@ -60,29 +60,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const RICOCHET_LINE_Y_RATIO = 0.1125; // 180 / 1600
     const SNIPER_LINE_Y_VAL = 80;
 
-    // --- CONFIGS DE HORDAS (espelhado do servidor) ---
+    // --- CONFIGS DE HORDAS (ATUALIZADO, espelhado do servidor) ---
     const WAVE_CONFIG = [
-        { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3000 },
-        { color: '#FF851B', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 2800 },
-        { color: '#FFDC00', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 2500 },
-        { color: '#7FDBFF', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2200 },
-        { color: '#B10DC9', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2000 }
+        { color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+        { color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+        { color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+        { color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+        { color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
     ];
     const SNIPER_BASE_CONFIG = {
         color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
-        projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30,
+        projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
         width: 25, height: 50, isSniper: true,
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
         color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 3500, isRicochet: true, width: 35, height: 35 
+        shootCooldown: 4200, isRicochet: true, width: 35, height: 35 
     };
     const BOSS_CONFIG = {
-        color: '#FFFFFF', hp: 1040, speed: 1.2, horizontalSpeed: 0.8, damage: 50, // HP reduzido em 35% (de 1600)
-        projectileDamage: 35, shootCooldown: 1200, width: 120, height: 120, isBoss: true
+        color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true
     };
-    const WAVE_INTERVAL_TICKS = 15 * 60;
+    const WAVE_INTERVAL_TICKS = 10 * 60; // Reduzido para 10 segundos
 
     // --- Funções de escalonamento para SP ---
     function getSPScalingFactor(wave) {
@@ -198,7 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.isInvincible = false;
             this.exp = 0; this.level = 1; this.expToNextLevel = 100;
             this.shootCooldown = 250; this.lastShootTime = 0;
-            this.bulletDamage = 10; this.bulletSpeed = 10;
+            this.bulletDamage = 60; // Dano aumentado
+            this.bulletSpeed = 10;
             // Upgrades
             this.cadenceUpgrades = 0;
             this.ally = null;
@@ -398,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeCanvas();
         player = new Player(canvas.width / 2, canvas.height - 100, 'white', playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
-        spState = { wave: 0, waveState: 'intermission', waveTimer: 5 * 60 };
+        spState = { wave: 0, waveState: 'intermission', waveTimer: WAVE_INTERVAL_TICKS };
         updateUI(); gameOverModal.style.display = 'none';
         
         if (isMultiplayer) {
@@ -603,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-
+    // LÓGICA DO SINGLE PLAYER ATUALIZADA
     function updateSinglePlayerLogic() {
         updateSPLightning();
 
@@ -613,14 +614,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 spState.wave++; spState.waveState = 'active';
                 const waveConfig = getSPWaveConfig(spState.wave);
 
-                // Inimigos Normais
-                const normalEnemyCount = spState.wave + 2;
+                // Inimigos Normais: Começa com 2, +1 a cada horda
+                const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
                     const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: waveConfig.speed / 2 };
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
-                // Snipers
+                // Snipers: Mantém lógica original
                 if (spState.wave >= 3) {
                     const sniperCount = 1 + (spState.wave - 3) * 2;
                     for (let i = 0; i < sniperCount; i++) {
@@ -633,9 +634,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 
-                // Ricochets
-                if (spState.wave >= 4 && (spState.wave - 4) % 3 === 0) {
-                    const ricochetCount = Math.floor((spState.wave - 4) / 3) + 1;
+                // Ricochets: A partir da horda 7, a cada 2 hordas
+                if (spState.wave >= 7 && (spState.wave - 7) % 2 === 0) {
+                    const ricochetCount = Math.floor((spState.wave - 7) / 2) + 1;
                     const ricochetConfigBase = getSPRicochetConfig(spState.wave);
                     for (let i = 0; i < ricochetCount; i++) {
                         const ricochetConfig = {
@@ -646,9 +647,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // Chefes
-                if (spState.wave >= 6 && (spState.wave - 6) % 2 === 0) { // Aparição a partir da horda 6
-                    const bossCount = Math.floor((spState.wave - 6) / 2) + 1;
+                // Chefes: A partir da horda 10, a cada 3 hordas
+                if (spState.wave >= 10 && (spState.wave - 10) % 3 === 0) {
+                    const bossCount = Math.floor((spState.wave - 10) / 3) + 1;
                     const bossConfigBase = getSPBossConfig(spState.wave);
                     for (let i = 0; i < bossCount; i++) {
                         const bossConfig = {
@@ -894,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: "Fúria dos Céus (Raio)", 
                 desc: "A cada 7s, 3 raios caem do céu, causando dano massivo. Efeito permanente.", 
                 apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, 
-                available: p => spState.wave >= 4 && !p.hasLightning
+                available: p => spState.wave >= 6 && !p.hasLightning // Disponível a partir da horda 6
             },
             { 
                 name: "Escudo Mágico", 
