@@ -159,12 +159,13 @@ body, html {
     font-family: var(--main-font);
     font-size: clamp(1em, 1.5vw, 1.5em);
     padding: 5px 10px;
-    border: 2px solid var(--neon-green);
-    background-color: var(--dark-bg);
-    color: var(--neon-green);
+    border: 2px solid var(--dark-bg);
+    background-color: var(--neon-green);
+    color: var(--dark-bg);
     cursor: pointer;
 }
-#gameControls button:hover { background-color: var(--neon-green); color: var(--dark-bg); }
+#gameControls button:hover { background-color: transparent; border-color: var(--neon-green); color: var(--neon-green); }
+
 
 #hpBarContainer, #expBarContainer, #shieldBarContainer {
     border: 2px solid var(--neon-green);

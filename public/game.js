@@ -63,13 +63,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURAÇÕES DO JOGO ---
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
-    const FLOOR_HEIGHT = 80; // Ajustado para nova proporção
+    
+    // --- Geometria do Chão (NOVO) ---
+    // Pontos definidos como [x_ratio, y_ratio] do canvas
+    const floorPath = [
+        [0.00, 0.70], [0.05, 0.70], [0.05, 0.74], [0.10, 0.74], [0.10, 0.78],
+        [0.15, 0.78], [0.15, 0.82], [0.20, 0.82], [0.20, 0.86], [0.25, 0.86],
+        [0.25, 0.90], [0.75, 0.90],
+        [0.75, 0.86], [0.80, 0.86], [0.80, 0.82], [0.85, 0.82], [0.85, 0.78],
+        [0.90, 0.78], [0.90, 0.74], [0.95, 0.74], [0.95, 0.70], [1.00, 0.70]
+    ];
+    let floorPoints = []; // Será populado com coordenadas em pixels
 
     // --- Posições no Canvas (Ratios aplicados a nova altura) ---
     const DEFENSE_LINE_Y_RATIO = 0.5;
     const BOSS_LINE_Y_RATIO = 0.3;
-    const RICOCHET_LINE_Y_RATIO = 0.2; // 180 / 900
-    const SNIPER_LINE_Y_RATIO = 0.1;   // 90 / 900
+    const RICOCHET_LINE_Y_RATIO = 0.2;
+    const SNIPER_LINE_Y_RATIO = 0.1;
 
     // --- CONFIGS DE HORDAS (Tamanhos atualizados) ---
     const WAVE_CONFIG = [
@@ -82,16 +92,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 50, height: 70, isSniper: true, // TAMANHO ATUALIZADO
+        width: 50, height: 70, isSniper: true,
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
         type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 55, height: 55 // TAMANHO ATUALIZADO
+        shootCooldown: 4200, isRicochet: true, width: 55, height: 55
     };
     const BOSS_CONFIG = {
         type: 'boss', color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 180, height: 180, isBoss: true // TAMANHO ATUALIZADO
+        projectileDamage: 35, shootCooldown: 1440, width: 180, height: 180, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
@@ -220,8 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 60; this.height = 80; // TAMANHO ATUALIZADO para proporção
-            this.velocityY = 0; this.speed = 7; // Velocidade ajustada para tela maior
+            this.width = 60; this.height = 80; // TAMANHO ATUALIZADO
+            this.velocityY = 0; this.speed = 7;
             this.jumpForce = 15; this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
             this.shootCooldown = 180;
@@ -285,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (this.x < 0) this.x = 0;
             if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
 
-            const groundY = canvas.height - this.height - FLOOR_HEIGHT;
+            // NOVO: Usa a função getGroundY para colisão com o chão
+            const groundY = getGroundY(this.x + this.width / 2) - this.height;
             if (this.y + this.velocityY >= groundY) {
                 this.velocityY = 0; this.onGround = true; this.y = groundY;
             } else {
@@ -446,8 +457,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         cleanup(); isGameOver = false; gameTime = 0;
-        resizeCanvas();
-        player = new Player(canvas.width / 2, canvas.height - 100, playerName);
+        resizeCanvas(); // Recalcula o chão aqui
+        player = new Player(canvas.width / 2, canvas.height - 200, playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
         reflectedProjectiles = [];
         spState = { 
@@ -470,6 +481,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const gameRect = gameContainer.getBoundingClientRect();
         canvas.width = gameRect.width;
         canvas.height = gameRect.height;
+        
+        // NOVO: Recalcula os pontos do chão em pixels sempre que a tela é redimensionada
+        floorPoints = floorPath.map(p => ({ x: p[0] * canvas.width, y: p[1] * canvas.height }));
     }
 
     function startGame(multiplayer) {
@@ -586,18 +600,62 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isAiming) player.shoot(aimAngle);
     }
     
-    function drawFloor() {
-        const brickWidth = 50; const brickHeight = 25;
-        const startY = canvas.height - FLOOR_HEIGHT;
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(0, startY, canvas.width, FLOOR_HEIGHT);
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
-        for (let y = startY; y < canvas.height; y += brickHeight) {
-            for (let x = (y / brickHeight) % 2 === 0 ? 0 : -brickWidth / 2; x < canvas.width; x += brickWidth) {
-                ctx.strokeRect(x, y, brickWidth, brickHeight);
+    // NOVO: Desenha o chão com base na imagem
+    function drawNewFloor() {
+        if (floorPoints.length === 0) return;
+
+        ctx.save();
+        ctx.strokeStyle = NEON_GREEN;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = NEON_GREEN;
+        ctx.shadowBlur = 10;
+        
+        // Desenha a linha superior do chão
+        ctx.beginPath();
+        ctx.moveTo(floorPoints[0].x, floorPoints[0].y);
+        for (let i = 1; i < floorPoints.length; i++) {
+            ctx.lineTo(floorPoints[i].x, floorPoints[i].y);
+        }
+        ctx.stroke();
+
+        // Desenha os "pingos" decorativos
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 5;
+        const flatPart = floorPoints.slice(10, 12);
+        const dripCount = 20;
+        for (let i = 0; i <= dripCount; i++) {
+            const ratio = i / dripCount;
+            const x = flatPart[0].x + (flatPart[1].x - flatPart[0].x) * ratio;
+            const y = flatPart[0].y;
+            const dripLength = 10 + Math.sin(i * 0.8) * 5 + Math.random() * 10;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, y + dripLength);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // NOVO: Calcula a altura Y do chão para uma dada posição X
+    function getGroundY(x) {
+        if (floorPoints.length < 2) return canvas.height; // Fallback
+
+        for (let i = 0; i < floorPoints.length - 1; i++) {
+            const p1 = floorPoints[i];
+            const p2 = floorPoints[i+1];
+            if (x >= p1.x && x <= p2.x) {
+                // Se o segmento é vertical, retorna o Y do ponto mais alto.
+                if (p1.x === p2.x) {
+                    return Math.min(p1.y, p2.y);
+                }
+                // Interpolação linear para segmentos inclinados (nenhum no design atual, mas bom ter)
+                // e retorna o Y para segmentos horizontais.
+                const slope = (p2.y - p1.y) / (p2.x - p1.x);
+                return p1.y + slope * (x - p1.x);
             }
         }
+        // Se estiver fora dos limites (esquerda/direita), retorna o Y do primeiro/último ponto.
+        return x < floorPoints[0].x ? floorPoints[0].y : floorPoints[floorPoints.length - 1].y;
     }
 
     function drawLightning(x, width) {
@@ -660,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function drawGameBackground() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawFloor();
+        drawNewFloor(); // ATUALIZADO
     }
 
     function updateSPLightning() {
