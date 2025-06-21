@@ -18,8 +18,28 @@ app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); }
 app.use(express.static(__dirname));
 
 // --- API para o Ranking ---
-app.get('/api/ranking', async (req, res) => { /* ... (código inalterado) ... */ });
-app.post('/api/ranking', async (req, res) => { /* ... (código inalterado) ... */ });
+app.get('/api/ranking', async (req, res) => {
+    try {
+        const scores = await db.getTopScores(10);
+        res.json(scores);
+    } catch (error) {
+        console.error("Erro ao buscar ranking:", error);
+        res.status(500).json({ message: "Erro ao buscar ranking." });
+    }
+});
+app.post('/api/ranking', async (req, res) => {
+    try {
+        const { name, timeSurvived } = req.body;
+        if (!name || typeof timeSurvived !== 'number') {
+            return res.status(400).json({ message: "Dados inválidos." });
+        }
+        await db.addScore(name, timeSurvived);
+        res.status(201).json({ message: "Pontuação adicionada com sucesso." });
+    } catch (error) {
+        console.error("Erro ao adicionar pontuação:", error);
+        res.status(500).json({ message: "Erro ao adicionar pontuação." });
+    }
+});
 
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
@@ -44,10 +64,10 @@ const WAVE_INTERVAL_SECONDS = 10;
 const SNIPER_BASE_CONFIG = { class: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5, projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.3, width: 25, height: 50, isSniper: true, speed: 1.0, horizontalSpeed: 0.5 };
 
 // --- Função para escalar dificuldade ---
-function getScalingFactor(wave) { /* ... (código inalterado) ... */ }
-function getWaveConfig(wave) { /* ... (código inalterado) ... */ }
-function getBossConfig(wave) { /* ... (código inalterado) ... */ }
-function getRicochetConfig(wave) { /* ... (código inalterado) ... */ }
+function getScalingFactor(wave) { if (wave <= 1) return 1.0; return 1.0 + Math.min(0.5, (wave - 1) * 0.1); }
+function getWaveConfig(wave) { const baseConfig = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1]; const scalingFactor = getScalingFactor(wave); return { ...baseConfig, hp: Math.floor(baseConfig.hp * scalingFactor), damage: Math.floor(baseConfig.damage * scalingFactor), projectileDamage: Math.floor(baseConfig.projectileDamage * scalingFactor) }; }
+function getBossConfig(wave) { const scalingFactor = getScalingFactor(wave); return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scalingFactor), damage: Math.floor(BOSS_CONFIG.damage * scalingFactor), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scalingFactor) }; }
+function getRicochetConfig(wave) { const scalingFactor = getScalingFactor(wave); return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scalingFactor), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scalingFactor) }; }
 
 function findOrCreateRoom() {
     for (const roomName in rooms) {
@@ -120,7 +140,22 @@ setInterval(() => {
         }
         
         // --- LÓGICA DO RAIO ---
-        /* ... (código inalterado) ... */
+        playerList.forEach(p => {
+            if (p.hasLightning && room.gameTime > p.nextLightningTime) {
+                p.nextLightningTime = room.gameTime + (9 * 60); // 9 segundos
+                for (let i = 0; i < 3; i++) {
+                    setTimeout(() => {
+                        if (rooms[roomName]) { // Verifica se a sala ainda existe
+                            const strikeX = Math.random() * LOGICAL_WIDTH;
+                            room.lightningStrikes.push({ x: strikeX, life: 30 });
+                            room.enemies.forEach(enemy => { if (Math.abs(enemy.x + enemy.width / 2 - strikeX) < 40) { enemy.hp -= 2500; } });
+                            room.enemies = room.enemies.filter(e => e.hp > 0);
+                        }
+                    }, i * 200);
+                }
+            }
+        });
+        if (room.lightningStrikes.length > 0) room.lightningStrikes = room.lightningStrikes.filter(ls => ls.life-- > 0);
 
         // IA DOS INIMIGOS
         room.enemies.forEach(enemy => {
@@ -131,7 +166,7 @@ setInterval(() => {
             let targetY;
             if (enemy.isSniper) targetY = SNIPER_LINE_Y; else if (enemy.isRicochet) targetY = RICOCHET_LINE_Y; else if (enemy.isBoss) targetY = BOSS_LINE_Y; else targetY = DEFENSE_LINE_Y;
             if (!enemy.reachedPosition) { if (enemy.y < targetY) { enemy.y += enemy.speed; } else { enemy.y = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; } }
-            else { /* ... (movimento de patrulha inalterado) ... */ }
+            else { const patrolRange = 100; enemy.x = enemy.patrolOriginX + Math.sin(room.gameTime / (100 / enemy.horizontalSpeed)) * patrolRange; }
             if (enemy.x < 0) enemy.x = 0; if (enemy.x > LOGICAL_WIDTH - enemy.width) enemy.x = LOGICAL_WIDTH - enemy.width;
             
             // Lógica de Tiro Coordenado
@@ -186,7 +221,13 @@ setInterval(() => {
             p.x += p.vx; p.y += p.vy;
 
             if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) { room.enemyProjectiles.splice(i, 1); continue; }
-            for (const player of playerList) { /* ... (colisão com jogador inalterada) ... */ }
+            for (const player of playerList) { 
+                if (p.x > player.x && p.x < player.x + 40 && p.y > player.y && p.y < player.y + 60) {
+                    io.to(player.id).emit('playerHit', p.damage);
+                    room.enemyProjectiles.splice(i, 1);
+                    break; 
+                }
+            }
         }
 
         io.to(roomName).emit('gameState', room);
@@ -200,18 +241,30 @@ io.on('connection', (socket) => {
     socket.on('joinMultiplayer', (playerData) => {
         const roomName = findOrCreateRoom(); socket.join(roomName); socket.room = roomName;
         const room = rooms[roomName];
-        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, allyCooldownWave: 0, hasLightning: false, hasTotalReaction: false, totalReactionReady: false, totalReactionCooldownEndWave: 0 };
+        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, allyCooldownWave: 0, hasLightning: false, nextLightningTime: 0, hasTotalReaction: false, totalReactionReady: false, totalReactionCooldownEndWave: 0 };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
 
-    socket.on('playerUpdate', (data) => { /* ... (código inalterado) ... */ });
-    socket.on('playerShoot', (bulletData) => { /* ... (código inalterado) ... */ });
-    socket.on('enemyHit', ({ enemyId, damage }) => { /* ... (código inalterado) ... */ });
-    socket.on('enemyProjectileDestroyed', (projectileId) => { /* ... (código inalterado) ... */ });
-    socket.on('playerGotAlly', () => { /* ... (código inalterado) ... */ });
-    socket.on('playerLostAlly', () => { /* ... (código inalterado) ... */ });
-    socket.on('playerGotLightning', () => { /* ... (código inalterado) ... */ });
+    socket.on('playerUpdate', (data) => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) Object.assign(rooms[socket.room].players[socket.id], data); });
+    socket.on('playerShoot', (bulletData) => { if (socket.room) socket.to(socket.room).emit('playerShot', bulletData); });
+    socket.on('enemyHit', ({ enemyId, damage }) => {
+        const room = rooms[socket.room];
+        if (!room) return;
+        const enemy = room.enemies.find(e => e.id === enemyId);
+        if (enemy) {
+            enemy.hp -= damage;
+            if (enemy.hp <= 0) {
+                const expGain = Math.floor(enemy.maxHp / 10);
+                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain });
+                room.enemies = room.enemies.filter(e => e.id !== enemyId);
+            }
+        }
+    });
+    socket.on('enemyProjectileDestroyed', (projectileId) => { if (rooms[socket.room]) rooms[socket.room].enemyProjectiles = rooms[socket.room].enemyProjectiles.filter(p => p.id !== projectileId); });
+    socket.on('playerGotAlly', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasAlly = true; rooms[socket.room].players[socket.id].allyCooldownWave = rooms[socket.room].wave + 5; } });
+    socket.on('playerLostAlly', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasAlly = false; });
+    socket.on('playerGotLightning', () => { if (rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasLightning = true; rooms[socket.room].players[socket.id].nextLightningTime = rooms[socket.room].gameTime + (2 * 60); } });
     
     socket.on('playerGotTotalReaction', () => {
         const room = rooms[socket.room];
@@ -241,11 +294,28 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => { /* ... (código inalterado) ... */ });
+    socket.on('disconnect', () => {
+        console.log('Jogador desconectado:', socket.id);
+        if (socket.room && rooms[socket.room]) {
+            delete rooms[socket.room].players[socket.id];
+            io.to(socket.room).emit('playerLeft', socket.id);
+        }
+    });
 });
 
 
 // --- Inicialização do Servidor ---
-async function startServer() { /* ... (código inalterado) ... */ }
+async function startServer() {
+    try {
+        await db.connect(); // Conecta ao banco de dados primeiro
+        server.listen(PORT, () => {
+            // Esta mensagem aparecerá nos logs do Render, confirmando que o servidor iniciou
+            console.log(`Servidor rodando e ouvindo na porta ${PORT}`);
+        });
+    } catch (err) {
+        console.error("Falha ao iniciar o servidor ou conectar ao DB:", err);
+        process.exit(1); // Encerra o processo se não conseguir iniciar
+    }
+}
 
 startServer();
