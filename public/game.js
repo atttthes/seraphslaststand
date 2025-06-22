@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rankingTableBody = document.querySelector('#rankingTable tbody');
     const closeRankingBtn = document.getElementById('closeRankingBtn');
 
-    // --- ATUALIZADO: Elementos do Modal de Configurações ---
+    // --- Elementos do Modal de Configurações ---
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsModal = document.getElementById('settingsModal');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SCALE_FACTOR = 1.33;
     const SCALE_DOWN_ATTR_FACTOR = 0.67;
     const SCALE_UP_SIZE_FACTOR = 1.65;
-    const ENEMY_AND_PROJECTILE_SIZE_INCREASE = 1.3; // ATUALIZADO: Fator de 30%
+    const ENEMY_AND_PROJECTILE_SIZE_INCREASE = 1.3;
 
     // --- Geometria do Chão ---
     const floorPath = [
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const RICOCHET_LINE_Y = logicalHeight * 0.2 * 0.75;
     const SNIPER_LINE_Y = logicalHeight * 0.1 * 0.75;
 
-    // --- CONFIGS DE HORDAS (Tamanhos atualizados) ---
+    // --- CONFIGS DE HORDAS (Com tamanhos aumentados) ---
     const ENEMY_SIZE_MOD = SCALE_UP_SIZE_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE;
     const WAVE_CONFIG = [
         { type: 'basic', color: '#FF4136', hp: Math.floor((72 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.04 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3600, width: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD },
@@ -150,12 +150,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- CLASSES DO JOGO ---
-    class Ally { /* ... (sem alterações) ... */ }
+    class Ally { 
+        constructor(owner) {
+            this.owner = owner;
+            this.width = owner.width / 1.5;
+            this.height = owner.height / 1.5;
+            this.x = 0;
+            this.y = 0;
+            this.maxHp = owner.maxHp / 2;
+            this.hp = this.maxHp;
+            this.lastShootTime = 0;
+            this.isInvincible = false;
+        }
+        draw() {
+            const color = this.isInvincible ? 'rgba(255, 255, 255, 0.4)' : '#FFFFFF';
+            drawTrashCan(this.x, this.y, this.width, this.height, color);
+        }
+        update(enemyList) {
+            this.x = this.owner.x - this.width - 10;
+            this.y = this.owner.y;
+            let nearestEnemy = null;
+            let minDistance = Infinity;
+            enemyList.forEach(enemy => {
+                const distance = Math.hypot(this.x - enemy.x, this.y - enemy.y);
+                if (distance < minDistance) { minDistance = distance; nearestEnemy = enemy; }
+            });
+            if (nearestEnemy) this.shoot(nearestEnemy);
+            this.draw();
+        }
+        shoot(target) {
+            const now = Date.now();
+            if (now - this.lastShootTime > this.owner.shootCooldown * 1.5) {
+                this.lastShootTime = now;
+                const angle = Math.atan2((target.y + target.height / 2) - (this.y + this.height / 2), (target.x + target.width / 2) - (this.x + this.width / 2));
+                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
+                projectiles.push(bullet);
+                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage, color: '#FFFFFF' });
+            }
+        }
+        takeDamage(damage) {
+            if (this.isInvincible) return;
+            this.hp -= damage;
+            this.isInvincible = true;
+            setTimeout(() => this.isInvincible = false, 500);
+            if (this.hp <= 0) {
+                this.owner.ally = null;
+                this.owner.allyCooldownWave = spState.wave + 2;
+                if(isMultiplayer) socket.emit('playerLostAlly');
+            }
+        }
+    }
     class Player {
         constructor(x, y, name = "Player", color = NEON_GREEN) {
             this.name = name; this.x = x; this.y = y;
             this.color = color;
-            // ATUALIZADO: Tamanho do jogador mantido como no arquivo original
             this.width = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR; 
             this.height = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
             this.velocityY = 0;
@@ -177,26 +225,22 @@ document.addEventListener('DOMContentLoaded', () => {
             this.currentReactionCooldown = 0;
             this.hasCorpseExplosion = false;
             this.corpseExplosionLevel = 0;
-            // ATUALIZADO: Lógica do escudo
             this.shield = {
                 active: false,
                 hp: 0,
                 maxHp: 2250, 
-                baseRadius: this.width * 0.8, // Raio proporcional ao jogador
+                baseRadius: this.width * 0.8,
                 auraFlicker: 0
             };
         }
 
         drawShield() {
-            // ATUALIZADO: O raio do escudo aumenta se o jogador tiver um aliado
             const currentRadius = this.ally ? this.shield.baseRadius * 1.8 : this.shield.baseRadius;
             const sCenterX = (this.x + this.width / 2) * scaleX;
             const sCenterY = (this.y + this.height / 2) * scaleY;
             const sRadius = currentRadius * Math.min(scaleX, scaleY);
-
             this.shield.auraFlicker += 0.05;
             const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
-            
             ctx.shadowColor = '#FFD700';
             ctx.shadowBlur = auraSize;
             ctx.beginPath();
@@ -256,7 +300,34 @@ document.addEventListener('DOMContentLoaded', () => {
         addExp(amount) { this.exp += amount; if (this.exp >= this.expToNextLevel) this.levelUp(); updateUI(); }
         levelUp() { this.exp -= this.expToNextLevel; this.level++; this.expToNextLevel = Math.floor(this.expToNextLevel * 1.5); this.hp = this.maxHp; this.rerolls = 1; showUpgradeModal(); }
     }
-    class Enemy { /* ... (sem alterações) ... */ }
+    class Enemy { 
+        constructor(config) {
+            Object.assign(this, config); this.maxHp = config.hp; this.patrolOriginX = null; this.reachedPosition = false; this.baseY = 0;
+        }
+        draw() {
+            const sX = this.x * scaleX; const sY = this.y * scaleY; const sWidth = this.width * scaleX; const sHeight = this.height * scaleY;
+            ctx.save(); ctx.strokeStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = 10; ctx.lineWidth = Math.max(1, sWidth / 15); ctx.strokeRect(sX, sY, sWidth, sHeight); ctx.restore();
+            const hpRatio = this.hp / this.maxHp; const barY = sY - (8 * scaleY); const barHeight = 3 * scaleY;
+            ctx.fillStyle = '#555'; ctx.fillRect(sX, barY, sWidth, barHeight);
+            ctx.fillStyle = hpRatio > 0.5 ? 'lightgreen' : hpRatio > 0.2 ? 'gold' : 'red'; ctx.fillRect(sX, barY, sWidth * hpRatio, barHeight);
+        }
+        update() {
+            if (!isMultiplayer) {
+                let targetY;
+                if (this.isSniper) targetY = SNIPER_LINE_Y; else if (this.isRicochet) targetY = RICOCHET_LINE_Y; else if (this.isBoss) targetY = BOSS_LINE_Y; else targetY = DEFENSE_LINE_Y;
+                if (!this.reachedPosition) { if (this.y < targetY) { this.y += this.speed; } else { this.y = targetY; this.baseY = targetY; this.reachedPosition = true; this.patrolOriginX = this.x; } } 
+                else {
+                    if (this.baseY) { const phase = (this.id.charCodeAt(this.id.length - 1) || 0) % (Math.PI * 2); this.y = this.baseY + Math.sin(gameTime * 0.05 + phase) * 5; }
+                    const patrolSpeed = this.horizontalSpeed || this.speed / 2;
+                    if (!this.isRicochet) { const moveDirection = Math.sign(player.x - this.x); this.x += moveDirection * patrolSpeed; }
+                    const patrolRange = logicalWidth * (this.isBoss ? 0.3 : 0.1); const leftBoundary = this.patrolOriginX - (patrolRange / 2); const rightBoundary = this.patrolOriginX + (patrolRange / 2);
+                    if (this.x < leftBoundary) this.x = leftBoundary; if (this.x > rightBoundary - this.width) this.x = rightBoundary - this.width;
+                }
+                if (this.x < 0) this.x = 0; if (this.x > logicalWidth - this.width) this.x = logicalWidth - this.width;
+            }
+            this.draw();
+        }
+    }
     class Projectile {
         constructor(x, y, angle, speed, damage, color, owner = 'player', originId = null) {
             this.id = `proj_${Date.now()}_${Math.random()}`;
@@ -265,12 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
             this.damage = damage; this.owner = owner; this.color = color;
             this.originId = originId;
             this.trail = []; this.trailLength = 10;
-            // ATUALIZADO: Tamanho do projétil aumentado em 30%
             this.radius = (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE;
         }
-
         drawTrail(aCtx = ctx) {
-            if (!gameSettings.effectsOn || this.trail.length < 2) return; // Checa configuração
+            if (!gameSettings.effectsOn || this.trail.length < 2) return;
             aCtx.save();
             aCtx.lineCap = 'round'; aCtx.lineJoin = 'round'; aCtx.strokeStyle = this.color; aCtx.shadowColor = this.color; aCtx.shadowBlur = 10;
             const sRadius = this.radius * Math.min(scaleX, scaleY);
@@ -282,8 +351,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             aCtx.restore();
         }
-        draw(aCtx = ctx) { /* ... (sem alterações) ... */ }
-        update(aCtx = ctx) { /* ... (sem alterações) ... */ }
+        draw(aCtx = ctx) {
+            this.drawTrail(aCtx);
+            const sX = this.x * scaleX; const sY = this.y * scaleY; const sRadius = this.radius * Math.min(scaleX, scaleY);
+            aCtx.beginPath(); aCtx.arc(sX, sY, sRadius, 0, Math.PI * 2); aCtx.fillStyle = this.color;
+            aCtx.shadowColor = this.color; aCtx.shadowBlur = 5; aCtx.fill(); aCtx.shadowBlur = 0;
+        }
+        update(aCtx = ctx) {
+            this.trail.push({ x: this.x, y: this.y });
+            if (this.trail.length > this.trailLength) this.trail.shift();
+            this.x += this.velocity.x; this.y += this.velocity.y;
+            this.draw(aCtx);
+        }
     }
     
     // --- FUNÇÕES DO JOGO ---
@@ -292,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         cleanup(); isGameOver = false; gameTime = 0;
-        lastFrameTime = 0; // Reseta o tempo do frame para o controle de FPS
+        lastFrameTime = 0;
         resizeCanvas();
         player = new Player(logicalWidth / 2, logicalHeight - 200, playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
@@ -303,7 +382,13 @@ document.addEventListener('DOMContentLoaded', () => {
         else { pauseBtn.style.display = 'block'; pauseBtn.textContent = '❚❚'; }
     }
     
-    function resizeCanvas() { /* ... (sem alterações) ... */ }
+    function resizeCanvas() {
+        backgroundCanvas.width = window.innerWidth; backgroundCanvas.height = window.innerHeight;
+        const gameRect = gameContainer.getBoundingClientRect();
+        canvas.width = gameRect.width; canvas.height = gameRect.height;
+        scaleX = canvas.width / logicalWidth; scaleY = canvas.height / logicalHeight;
+        floorPoints = floorPath.map(p => ({ x: p[0] * logicalWidth, y: p[1] * logicalHeight }));
+    }
 
     function startGame(multiplayer) {
         playerName = playerNameInput.value || "Anônimo";
@@ -311,33 +396,160 @@ document.addEventListener('DOMContentLoaded', () => {
         mainMenu.style.display = 'none';
         appWrapper.style.display = 'flex';
         init(); isGameRunning = true; 
-        requestAnimationFrame(animate); // Inicia o loop de animação
+        requestAnimationFrame(animate);
     }
     
     function createCorpseExplosion(enemy) {
         if (!player || !player.hasCorpseExplosion) return;
         const numProjectiles = 8;
         const baseDamage = Math.floor(200 * SCALE_DOWN_ATTR_FACTOR);
-        // ATUALIZADO: Dano escalado com 5% por nível
         const damage = baseDamage * (1 + (player.corpseExplosionLevel - 1) * 0.05);
         for (let i = 0; i < numProjectiles; i++) {
             const angle = (i / numProjectiles) * Math.PI * 2;
-            const bullet = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, (12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage, '#FFA500', 'corpse_explosion');
-            projectiles.push(bullet);
+            projectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, (12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage, '#FFA500', 'corpse_explosion'));
         }
     }
 
-    function connectMultiplayer() { /* ... (sem alterações, a lógica de tamanho é tratada no client-side) ... */ }
-    function handleAimingAndShooting() { /* ... (sem alterações) ... */ }
-    function drawNewFloor() { /* ... (sem alterações) ... */ }
-    function getGroundY(x) { /* ... (sem alterações) ... */ }
-    function drawLightning(x, width) { /* ... (sem alterações) ... */ }
-    function initBackground() { /* ... (sem alterações) ... */ }
-    function animateBackground() { /* ... (sem alterações) ... */ }
+    function connectMultiplayer() {
+        socket = io();
+        socket.on('connect', () => socket.emit('joinMultiplayer', { name: player.name, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp }));
+        socket.on('waveStart', (wave) => { if (player.hasTotalReaction && player.currentReactionCooldown > 0) { player.currentReactionCooldown--; if (player.currentReactionCooldown <= 0) { player.totalReactionReady = true; } updateUI(); } });
+        socket.on('gameState', (state) => {
+            if (!isGameRunning) return;
+            gameTime = state.gameTime; spState.wave = state.wave; spState.waveState = state.waveState; spState.waveTimer = state.waveTimer * 60;
+            const serverEnemyIds = state.enemies.map(e => e.id); enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
+            state.enemies.forEach(eData => { let enemy = enemies.find(e => e.id === eData.id); if (enemy) { Object.assign(enemy, eData); } else { enemies.push(new Enemy({ ...eData })); } });
+            lightningStrikes = state.lightningStrikes;
+            const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id)); enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
+            state.enemyProjectiles.forEach(pData => {
+                let p = enemyProjectiles.find(ep => ep.id === pData.id);
+                if (!p) { const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, 'enemy', pData.originId); newProj.id = pData.id; newProj.velocity.x = pData.vx; newProj.velocity.y = pData.vy; newProj.radius = pData.radius; enemyProjectiles.push(newProj); } 
+                else { p.x = pData.x; p.y = pData.y; }
+            });
+            for(const id in state.players) {
+                const pData = state.players[id];
+                if (id === socket.id) {
+                    player.color = pData.color; if(pData.hasAlly && !player.ally) player.ally = new Ally(player); if(!pData.hasAlly && player.ally) player.ally = null;
+                    if(pData.hasLightning) player.hasLightning = true; if(pData.hasCorpseExplosion && player.corpseExplosionLevel < pData.corpseExplosionLevel){ player.hasCorpseExplosion = true; player.corpseExplosionLevel = pData.corpseExplosionLevel; }
+                    if(pData.hasTotalReaction) { player.hasTotalReaction = true; if(pData.totalReactionCooldownWave > spState.wave) { player.totalReactionReady = false; player.currentReactionCooldown = pData.totalReactionCooldownWave - spState.wave; } else { player.totalReactionReady = true; player.currentReactionCooldown = 0; } }
+                    continue;
+                }
+                if(!otherPlayers[id]) { otherPlayers[id] = new Player(pData.x, pData.y, pData.name, pData.color); }
+                Object.assign(otherPlayers[id], {x: pData.x, y: pData.y, hp: pData.hp, name: pData.name, color: pData.color});
+                if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
+                if (pData.hasLightning) otherPlayers[id].hasLightning = true; if (pData.hasCorpseExplosion) otherPlayers[id].hasCorpseExplosion = true;
+            }
+        });
+        socket.on('playerHit', (damage) => player.takeDamage(damage));
+        socket.on('playerShot', (bulletData) => projectiles.push(new Projectile(bulletData.x, bulletData.y, bulletData.angle, bulletData.speed, bulletData.damage, bulletData.color || NEON_GREEN, 'other_player')));
+        socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
+            const enemy = enemies.find(e => e.id === enemyId);
+            if (enemy && isMultiplayer) { const killerPlayer = killerId === socket.id ? player : otherPlayers[killerId]; if (killerPlayer && killerPlayer.hasCorpseExplosion) { createCorpseExplosion(enemy); } }
+            enemies = enemies.filter(e => e.id !== enemyId); if(killerId === socket.id) player.addExp(expGain);
+        });
+        socket.on('playerLeft', (id) => delete otherPlayers[id]);
+    }
+    function handleAimingAndShooting() {
+        const isAiming = aimStick.active || mouse.down;
+        if (isAiming) {
+            const angle = aimStick.active ? aimStick.angle : Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
+            player.shoot(angle);
+        }
+    }
+    function drawNewFloor() {
+        if (floorPoints.length === 0) return;
+        ctx.save(); ctx.strokeStyle = NEON_GREEN; ctx.lineWidth = 4; ctx.shadowColor = NEON_GREEN; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.moveTo(floorPoints[0].x * scaleX, floorPoints[0].y * scaleY);
+        for (let i = 1; i < floorPoints.length; i++) { ctx.lineTo(floorPoints[i].x * scaleX, floorPoints[i].y * scaleY); }
+        ctx.stroke();
+        ctx.lineWidth = 2; ctx.shadowBlur = 5;
+        const flatPart = floorPoints.slice(10, 12); const dripCount = 20;
+        for (let i = 0; i <= dripCount; i++) {
+            const ratio = i / dripCount; const x = flatPart[0].x + (flatPart[1].x - flatPart[0].x) * ratio; const y = flatPart[0].y; const dripLength = 10 + Math.sin(i * 0.8) * 5 + Math.random() * 10;
+            ctx.beginPath(); ctx.moveTo(x * scaleX, y * scaleY); ctx.lineTo(x * scaleX, (y + dripLength) * scaleY); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function getGroundY(x) {
+        if (floorPoints.length < 2) return logicalHeight;
+        for (let i = 0; i < floorPoints.length - 1; i++) {
+            const p1 = floorPoints[i]; const p2 = floorPoints[i+1];
+            if (x >= p1.x && x <= p2.x) { if (p1.x === p2.x) return Math.min(p1.y, p2.y); const slope = (p2.y - p1.y) / (p2.x - p1.x); return p1.y + slope * (x - p1.x); }
+        }
+        return x < floorPoints[0].x ? floorPoints[0].y : floorPoints[floorPoints.length - 1].y;
+    }
+    function drawLightning(x, width) {
+        const sX = x * scaleX; const sWidth = width * scaleX;
+        ctx.save(); ctx.shadowColor = '#8A2BE2'; ctx.shadowBlur = 25; ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
+        ctx.lineWidth = (1 + Math.random() * 4) * Math.min(scaleX, scaleY); ctx.beginPath();
+        let currentY = 0; let currentX = sX; ctx.moveTo(currentX, currentY);
+        while(currentY < canvas.height) { const nextY = currentY + (Math.random() * 30 + 20) * scaleY; const nextX = currentX + (Math.random() - 0.5) * sWidth; ctx.lineTo(nextX, nextY); currentY = nextY; currentX = nextX; }
+        ctx.stroke(); ctx.restore();
+    }
+    function initBackground() {
+        backgroundOrbs = [];
+        for (let i = 0; i < 50; i++) { backgroundOrbs.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5, radius: Math.random() * 2 + 1, hue: Math.random() * 360 }); }
+    }
+    function animateBackground() {
+        bgCtx.fillStyle = 'rgba(10, 10, 10, 0.1)'; bgCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+        backgroundOrbs.forEach(orb => {
+            orb.x += orb.vx; orb.y += orb.vy; orb.hue = (orb.hue + 0.5) % 360;
+            if (orb.x < 0 || orb.x > backgroundCanvas.width) orb.vx *= -1; if (orb.y < 0 || orb.y > backgroundCanvas.height) orb.vy *= -1;
+            const color = `hsl(${orb.hue}, 100%, 50%)`; bgCtx.beginPath(); bgCtx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+            bgCtx.fillStyle = color; bgCtx.shadowColor = color; bgCtx.shadowBlur = 10; bgCtx.fill();
+        });
+        bgCtx.shadowBlur = 0; requestAnimationFrame(animateBackground);
+    }
     function drawGameBackground() { ctx.clearRect(0, 0, canvas.width, canvas.height); drawNewFloor(); }
-    function updateSPLightning() { /* ... (sem alterações) ... */ }
-    function shootForSPEnemy(enemy) { /* ... (sem alterações) ... */ }
-    function updateSinglePlayerLogic() { /* ... (sem alterações) ... */ }
+    function updateSPLightning() {
+        const visualDurationTicks = 30; lightningStrikes = lightningStrikes.filter(s => gameTime < s.creationTime + visualDurationTicks);
+        if (player.hasLightning && gameTime >= player.nextLightningTime) {
+            player.nextLightningTime = gameTime + 9 * 60;
+            const lightningDamage = Math.floor(WAVE_CONFIG[0].hp * SCALE_DOWN_ATTR_FACTOR);
+            for (let i = 0; i < 3; i++) {
+                const strikeX = Math.random() * logicalWidth; const strikeWidth = player.width * 1.2;
+                lightningStrikes.push({ x: strikeX, width: strikeWidth, creationTime: gameTime });
+                enemies.forEach(enemy => { if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) { enemy.hp -= lightningDamage; } });
+            }
+            enemies = enemies.filter(e => { if (e.hp <= 0) { createCorpseExplosion(e); player.addExp(e.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50))); return false; } return true; });
+        }
+    }
+    function shootForSPEnemy(enemy) {
+        if (!player) return; let angle; let speed = (10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR;
+        if (enemy.isRicochet) { const wallX = (player.x > enemy.x) ? logicalWidth : 0; const virtualPlayerX = (wallX === 0) ? -player.x : (2 * logicalWidth - player.x); angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2)); speed = (14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; }
+        else { angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2)); if (enemy.isSniper) speed = (16 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; }
+        const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, 'enemy', enemy.id);
+        if (enemy.isRicochet) { newProj.canRicochet = true; newProj.bouncesLeft = 1; }
+        enemyProjectiles.push(newProj);
+    }
+    function updateSinglePlayerLogic() {
+        updateSPLightning();
+        if (spState.waveState === 'intermission') {
+            spState.waveTimer--; if (spState.waveTimer <= 0) {
+                spState.wave++; spState.waveState = 'active';
+                if (player.hasTotalReaction && player.currentReactionCooldown > 0) { player.currentReactionCooldown--; if (player.currentReactionCooldown <= 0) player.totalReactionReady = true; }
+                const waveConfig = getSPWaveConfig(spState.wave); const normalEnemyCount = spState.wave + 1;
+                for(let i = 0; i < normalEnemyCount; i++) { setTimeout(() => enemies.push(new Enemy({ ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - waveConfig.width), y: -50, horizontalSpeed: waveConfig.speed / 2 })), i * 250); }
+                if (spState.wave >= 3) {
+                    const sniperCount = 1 + Math.floor((spState.wave - 3) / 2);
+                    for (let i = 0; i < sniperCount; i++) {
+                        const baseConfig = getSPWaveConfig(spState.wave);
+                        const sniperConfig = { ...SNIPER_BASE_CONFIG, id: `sniper_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - SNIPER_BASE_CONFIG.width), y: -50, hp: baseConfig.hp * SNIPER_BASE_CONFIG.hpMultiplier, damage: baseConfig.damage * SNIPER_BASE_CONFIG.damageMultiplier, projectileDamage: baseConfig.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier, shootCooldown: baseConfig.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier };
+                        enemies.push(new Enemy(sniperConfig));
+                    }
+                }
+                if (spState.wave >= 7 && (spState.wave - 7) % 2 === 0) {
+                    const ricochetCount = Math.floor((spState.wave - 7) / 2) + 1; const ricochetConfigBase = getSPRicochetConfig(spState.wave);
+                    for (let i = 0; i < ricochetCount; i++) { enemies.push(new Enemy({ ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - ricochetConfigBase.width), y: -50 })); }
+                }
+                if (spState.wave >= 10 && (spState.wave - 10) % 3 === 0) {
+                    const bossCount = Math.floor((spState.wave - 10) / 3) + 1; const bossConfigBase = getSPBossConfig(spState.wave);
+                    for (let i = 0; i < bossCount; i++) { enemies.push(new Enemy({ ...bossConfigBase, id: `boss_${Date.now()}_${i}`, x: (logicalWidth / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height })); }
+                }
+            }
+        } else if (spState.waveState === 'active' && enemies.length === 0) { spState.waveState = 'intermission'; spState.waveTimer = WAVE_INTERVAL_TICKS; }
+        enemies.forEach(enemy => { const now = Date.now(); if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) { const enemyType = enemy.type; if(gameTime >= (spState.classShootingCooldowns[enemyType] || 0)) { shootForSPEnemy(enemy); enemy.lastShotTime = now; spState.classShootingCooldowns[enemyType] = gameTime + ENEMY_SHOOT_DELAY_TICKS; } } });
+    }
 
     function gameLoop() {
         if (isPaused) return;
@@ -351,7 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath();
             ctx.moveTo((player.x + player.width / 2) * scaleX, (player.y + player.height / 2) * scaleY);
             ctx.lineTo((player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000) * scaleX, (player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000) * scaleY);
-            ctx.strokeStyle = `rgba(0, 255, 127, ${gameSettings.aimOpacity / 100})`; // Usa opacidade da mira
+            ctx.strokeStyle = `rgba(0, 255, 127, ${gameSettings.aimOpacity / 100})`;
             ctx.lineWidth = 2 * Math.min(scaleX, scaleY);
             ctx.stroke();
             ctx.restore();
@@ -365,7 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(otherPlayers).forEach(p => p.draw());
         lightningStrikes.forEach(strike => { for(let i=0; i<3; i++) drawLightning(strike.x, strike.width); });
         
-        // ... (resto do loop de renderização e projéteis)
         projectiles.forEach((p, i) => { p.update(); if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) projectiles.splice(i, 1); });
         reflectedProjectiles.forEach((p, i) => { p.update(); if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) { reflectedProjectiles.splice(i, 1); } });
         enemyProjectiles.forEach((p, i) => {
@@ -374,33 +585,54 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // --- LÓGICA DE COLISÃO ---
-        // ... (reactionBlade, projéteis refletidos, etc., sem alterações)
+        if (reactionBlade.active) {
+            reactionBlade.y -= 25; reactionBlade.width += 40; reactionBlade.x = player.x + player.width / 2 - reactionBlade.width / 2;
+            ctx.save(); ctx.beginPath(); ctx.moveTo(reactionBlade.x * scaleX, (reactionBlade.y + reactionBlade.height) * scaleY);
+            ctx.quadraticCurveTo((reactionBlade.x + reactionBlade.width / 2) * scaleX, (reactionBlade.y - reactionBlade.height * 2) * scaleY, (reactionBlade.x + reactionBlade.width) * scaleX, (reactionBlade.y + reactionBlade.height) * scaleY);
+            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 10 * Math.min(scaleX, scaleY); ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 25; ctx.stroke(); ctx.restore();
+            if (reactionBlade.y < -50) reactionBlade.active = false;
+        }
 
         for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
             const p = enemyProjectiles[i];
-            
+            if (reactionBlade.active && checkCollision(p, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
+                const originEnemy = enemies.find(e => e.id === p.originId);
+                if (originEnemy) {
+                    const angle = Math.atan2(originEnemy.y - p.y, originEnemy.x - p.x);
+                    reflectedProjectiles.push(new Projectile(p.x, p.y, angle, (15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, p.damage * 3, '#FFFFFF', 'reflected', originEnemy.id));
+                }
+                if (isMultiplayer) socket.emit('enemyProjectileDestroyed', p.id);
+                enemyProjectiles.splice(i, 1);
+                continue;
+            }
             if (player.shield.active) {
-                // ATUALIZADO: Usa raio dinâmico do escudo para colisão
                 const currentRadius = player.ally ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
-                const dx = p.x - (player.x + player.width / 2);
-                const dy = p.y - (player.y + player.height / 2);
+                const dx = p.x - (player.x + player.width / 2); const dy = p.y - (player.y + player.height / 2);
                 if (Math.hypot(dx, dy) < currentRadius + p.radius) {
-                    player.shield.hp -= p.damage;
-                    if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', p.id);
+                    player.shield.hp -= p.damage; if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', p.id);
                     if (!isMultiplayer) enemyProjectiles.splice(i, 1);
                     continue;
                 }
             }
-
             if (checkCollision(player, p)) { player.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); } 
             else if (player.ally && checkCollision(player.ally, p)) { player.ally.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); }
         }
 
         enemies.forEach((enemy) => {
             enemy.update();
+            if (reactionBlade.active && !reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
+                reactionBlade.hitEnemies.push(enemy.id);
+                if (isMultiplayer) { socket.emit('bladeHitEnemy', enemy.id); } 
+                else {
+                    const damage = enemy.maxHp * 0.7; enemy.hp -= damage;
+                    if (enemy.hp <= 0) {
+                        createCorpseExplosion(enemy);
+                        setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50))); } }, 0);
+                    }
+                }
+            }
             if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
             if (player.ally && checkCollision(player.ally, enemy)) player.ally.takeDamage(enemy.damage);
-
             for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
                 const proj = projectiles[projIndex];
                 if((proj.owner === 'player' || proj.owner === 'other_player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
@@ -408,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     else {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
-                            if(proj.owner !== 'corpse_explosion') { createCorpseExplosion(enemy); }
+                            if(proj.owner !== 'corpse_explosion') createCorpseExplosion(enemy);
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); } }, 0);
                         }
@@ -424,28 +656,50 @@ document.addEventListener('DOMContentLoaded', () => {
     function animate(currentTime) {
         if (isGameOver) { cleanup(); return; }
         animationFrameId = requestAnimationFrame(animate);
-
         const deltaTime = currentTime - lastFrameTime;
-        if (deltaTime < targetInterval) {
-            return; // Pula este frame se não for a hora (controle de FPS)
-        }
+        if (deltaTime < targetInterval) return;
         lastFrameTime = currentTime - (deltaTime % targetInterval);
-        
         gameLoop();
     }
 
-    function checkCollision(obj1, obj2) { /* ... (sem alterações) ... */ }
-    function updateUI() { /* ... (sem alterações) ... */ }
-    async function endGame() { /* ... (sem alterações) ... */ }
+    function checkCollision(obj1, obj2) {
+        const r1 = obj1.radius || 0; const r2 = obj2.radius || 0; const w1 = obj1.width || 0; const h1 = obj1.height || 0; const w2 = obj2.width || 0; const h2 = obj2.height || 0;
+        const obj1Left = obj1.x - r1; const obj1Right = obj1.x + (w1 || r1); const obj1Top = obj1.y - r1; const obj1Bottom = obj1.y + (h1 || r1);
+        const obj2Left = obj2.x - r2; const obj2Right = obj2.x + (w2 || r2); const obj2Top = obj2.y - r2; const obj2Bottom = obj2.y + (h2 || r2);
+        return (obj1Left < obj2Right && obj1Right > obj2Left && obj1Top < obj2Bottom && obj1Bottom > obj2Top);
+    }
+    function updateUI() {
+        if (!player) return;
+        hpBar.style.width = `${(player.hp / player.maxHp) * 100}%`; expBar.style.width = `${(player.exp / player.expToNextLevel) * 100}%`;
+        timerDisplay.textContent = `Tempo: ${Math.floor(gameTime/60)}s`;
+        if (spState.waveState === 'intermission') { const timer = isMultiplayer ? Math.ceil(spState.waveTimer/60) : Math.ceil(spState.waveTimer / 60); waveDisplay.textContent = `Próxima horda em ${timer}s`; waveDisplay.style.color = "gold"; }
+        else { waveDisplay.textContent = `Horda: ${spState.wave}`; waveDisplay.style.color = "white"; }
+        if (player.hasTotalReaction) {
+            totalReactionBtn.style.display = 'flex'; totalReactionBtn.disabled = !player.totalReactionReady;
+            if(!player.totalReactionReady) { totalReactionBtn.textContent = `${player.currentReactionCooldown}`; totalReactionBtn.title = `Disponível em ${player.currentReactionCooldown} horda(s)`; }
+            else { totalReactionBtn.textContent = '⚔️'; totalReactionBtn.title = 'Reação Total'; }
+        } else { totalReactionBtn.style.display = 'none'; }
+        const shieldBarContainer = document.getElementById('shieldBarContainer');
+        if (player.shield.active && player.shield.maxHp > 0) { shieldBarContainer.style.display = 'block'; document.getElementById('shieldBar').style.width = `${(player.shield.hp / player.shield.maxHp) * 100}%`; } 
+        else { shieldBarContainer.style.display = 'none'; }
+    }
+    async function endGame() {
+        if (isGameOver) return;
+        isGameOver = true; isGameRunning = false;
+        const finalTimeInSeconds = Math.floor(gameTime / 60);
+        finalTimeDisplay.textContent = finalTimeInSeconds;
+        finalWaveDisplay.textContent = `${spState.wave}`;
+        gameOverModal.style.display = 'flex';
+        try { await fetch('/api/ranking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: playerName, timeSurvived: finalTimeInSeconds }) }); } 
+        catch (error) { console.error("Falha ao salvar pontuação:", error); }
+    }
 
     function showUpgradeModal() {
         isPaused = true; upgradeOptionsContainer.innerHTML = '';
         rerollUpgradesBtn.textContent = `Trocar Opções (${player.rerolls}/1)`;
         rerollUpgradesBtn.disabled = player.rerolls <= 0;
         const currentWave = spState.wave;
-        
         const corpseExplosionBaseDamage = Math.floor(200 * SCALE_DOWN_ATTR_FACTOR);
-        // ATUALIZADO: Dano escalado com 5%
         const corpseExplosionNextLevelDamage = corpseExplosionBaseDamage * (1 + (player.corpseExplosionLevel) * 0.05);
 
         const allUpgrades = [
@@ -462,17 +716,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 available: p => currentWave >= 4 && p.corpseExplosionLevel < 5
             },
             { name: "Fúria dos Céus", desc: "A cada 9s, 3 raios caem do céu. Efeito permanente.", apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, available: p => currentWave >= 8 && !p.hasLightning },
-            { // ATUALIZADO: Lógica do upgrade de escudo
+            {
                 name: player.shield.active ? "Restaurar Escudo" : "Escudo Mágico",
                 desc: player.shield.active ? "Restaura 500 de HP do seu escudo." : "Cria um escudo com 2250 de vida.",
-                apply: p => {
-                    if (p.shield.active) {
-                        p.shield.hp = Math.min(p.shield.maxHp, p.shield.hp + 500);
-                    } else {
-                        p.shield.active = true;
-                        p.shield.hp = p.shield.maxHp;
-                    }
-                },
+                apply: p => { if (p.shield.active) { p.shield.hp = Math.min(p.shield.maxHp, p.shield.hp + 500); } else { p.shield.active = true; p.shield.hp = p.shield.maxHp; } },
                 available: p => currentWave >= 5
             },
             { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (70% da vida máx.). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction }
@@ -486,88 +733,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function selectUpgrade(upgrade) { upgrade.apply(player); upgradeModal.style.display = 'none'; isPaused = false; }
 
-    // --- ATUALIZADO: Funções de Configurações ---
+    // --- Funções de Configurações ---
     function loadSettings() {
         const savedSettings = JSON.parse(localStorage.getItem('neonOutbreakSettings'));
         const defaults = { fps: 60, effectsOn: true, uiOpacity: 100, aimOpacity: 40 };
         gameSettings = { ...defaults, ...savedSettings };
         applySettings();
     }
-
-    function saveSettings() {
-        localStorage.setItem('neonOutbreakSettings', JSON.stringify(gameSettings));
-    }
-
+    function saveSettings() { localStorage.setItem('neonOutbreakSettings', JSON.stringify(gameSettings)); }
     function applySettings() {
         targetInterval = 1000 / gameSettings.fps;
         document.documentElement.style.setProperty('--ui-opacity', gameSettings.uiOpacity / 100);
     }
-
     function updateSettingsUI() {
         document.querySelectorAll('#fpsSelector button').forEach(btn => btn.classList.toggle('active', parseInt(btn.dataset.fps) === gameSettings.fps));
         effectsToggle.checked = gameSettings.effectsOn;
-        uiOpacitySlider.value = gameSettings.uiOpacity;
-        uiOpacityValue.textContent = `${gameSettings.uiOpacity}%`;
-        aimOpacitySlider.value = gameSettings.aimOpacity;
-        aimOpacityValue.textContent = `${gameSettings.aimOpacity}%`;
+        uiOpacitySlider.value = gameSettings.uiOpacity; uiOpacityValue.textContent = `${gameSettings.uiOpacity}%`;
+        aimOpacitySlider.value = gameSettings.aimOpacity; aimOpacityValue.textContent = `${gameSettings.aimOpacity}%`;
     }
 
-    // CORREÇÃO: Função `setupTouchControls` foi definida e implementada.
+    // CORREÇÃO: Função `setupTouchControls` agora é definida antes de ser chamada.
     function setupTouchControls() {
         if (!isTouchDevice) return;
-    
-        // Lógica para os botões de movimento e pulo
         touchLeftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.a.pressed = true; }, { passive: false });
         touchLeftBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.a.pressed = false; });
-    
         touchRightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.d.pressed = true; }, { passive: false });
         touchRightBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.d.pressed = false; });
-    
         touchJumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (player) player.jump(); }, { passive: false });
     
-        // Lógica para o joystick de mira
-        let joystickActive = false;
-        let joystickStartX = 0;
-        let joystickStartY = 0;
-    
+        let joystickActive = false; let joystickStartX = 0; let joystickStartY = 0;
         aimJoystick.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            joystickActive = true;
-            aimStick.active = true;
-            const touch = e.touches[0];
-            const rect = aimJoystick.getBoundingClientRect();
-            joystickStartX = rect.left + rect.width / 2;
-            joystickStartY = rect.top + rect.height / 2;
+            e.preventDefault(); joystickActive = true; aimStick.active = true;
+            const rect = aimJoystick.getBoundingClientRect(); joystickStartX = rect.left + rect.width / 2; joystickStartY = rect.top + rect.height / 2;
         }, { passive: false });
-    
         aimJoystick.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (!joystickActive || !e.touches[0]) return;
-            const touch = e.touches[0];
-            const dx = touch.clientX - joystickStartX;
-            const dy = touch.clientY - joystickStartY;
+            e.preventDefault(); if (!joystickActive || !e.touches[0]) return;
+            const touch = e.touches[0]; const dx = touch.clientX - joystickStartX; const dy = touch.clientY - joystickStartY;
             aimStick.angle = Math.atan2(dy, dx);
-    
             const maxMove = aimJoystick.offsetWidth / 2 - aimJoystickKnob.offsetWidth / 2;
             const distance = Math.min(maxMove, Math.hypot(dx, dy));
-            const moveX = Math.cos(aimStick.angle) * distance;
-            const moveY = Math.sin(aimStick.angle) * distance;
+            const moveX = Math.cos(aimStick.angle) * distance; const moveY = Math.sin(aimStick.angle) * distance;
             aimJoystickKnob.style.transform = `translate(${moveX}px, ${moveY}px)`;
-    
         }, { passive: false });
-    
-        const resetJoystick = (e) => {
-            e.preventDefault();
-            joystickActive = false;
-            aimStick.active = false;
-            aimJoystickKnob.style.transform = 'translate(0px, 0px)';
-        };
+        const resetJoystick = (e) => { e.preventDefault(); joystickActive = false; aimStick.active = false; aimJoystickKnob.style.transform = 'translate(0px, 0px)'; };
         aimJoystick.addEventListener('touchend', resetJoystick);
         aimJoystick.addEventListener('touchcancel', resetJoystick);
     }
 
     // --- EVENT LISTENERS ---
-    setupTouchControls(); // A chamada agora tem uma função para executar e não quebra o script
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('keydown', (e) => { if (!isGameRunning || isPaused) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = true; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = true; break; case 'Space': case 'KeyW': case 'ArrowUp': if(player) player.jump(); break; } });
+    window.addEventListener('keyup', (e) => { if (!isGameRunning) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = false; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = false; break; } });
+    canvas.addEventListener('mousemove', (e) => { const r = canvas.getBoundingClientRect(); mouse.x = (e.clientX - r.left) / scaleX; mouse.y = (e.clientY - r.top) / scaleY; });
+    canvas.addEventListener('mousedown', () => { if (isGameRunning && !isPaused) mouse.down = true; });
+    window.addEventListener('mouseup', () => { mouse.down = false; });
+    
+    // CORREÇÃO: Chamada da função movida para depois da sua definição para evitar erros.
+    setupTouchControls(); 
+    
     startSinglePlayerBtn.addEventListener('click', () => startGame(false));
     startMultiplayerBtn.addEventListener('click', () => startGame(true));
     restartBtn.addEventListener('click', () => startGame(isMultiplayer));
@@ -577,42 +800,20 @@ document.addEventListener('DOMContentLoaded', () => {
     rerollUpgradesBtn.addEventListener('click', () => { if (player && player.rerolls > 0) { player.rerolls--; showUpgradeModal(); } });
     totalReactionBtn.addEventListener('click', () => { if (player && player.totalReactionReady) { player.totalReactionReady = false; player.currentReactionCooldown = player.totalReactionCooldown + 1; reactionBlade = { active: true, x: 0, y: player.y, width: player.width, height: 15, hitEnemies: [] }; if (isMultiplayer) socket.emit('playerUsedTotalReaction'); updateUI(); } });
     
-    // CORREÇÃO: Lógica do botão de ranking foi implementada
     showRankingBtn.addEventListener('click', async () => {
         try {
-            rankingTableBody.innerHTML = '<tr><td colspan="4">Carregando...</td></tr>';
-            rankingModal.style.display = 'flex';
-            
+            rankingTableBody.innerHTML = '<tr><td colspan="4">Carregando...</td></tr>'; rankingModal.style.display = 'flex';
             const response = await fetch('/api/ranking');
-            if (!response.ok) {
-                throw new Error(`Falha ao carregar o ranking (status: ${response.status})`);
-            }
+            if (!response.ok) throw new Error(`Falha ao carregar o ranking (status: ${response.status})`);
             const scores = await response.json();
-            
-            rankingTableBody.innerHTML = ''; // Limpa a tabela
-            if (scores.length === 0) {
-                rankingTableBody.innerHTML = `<tr><td colspan="4">Nenhuma pontuação registrada ainda.</td></tr>`;
-            } else {
-                scores.forEach((score, index) => {
-                    const row = rankingTableBody.insertRow();
-                    const date = new Date(score.date).toLocaleDateString('pt-BR');
-                    row.innerHTML = `
-                        <td>${index + 1}</td>
-                        <td>${score.name || 'Anônimo'}</td>
-                        <td>${score.timeSurvived}</td>
-                        <td>${date}</td>
-                    `;
-                });
-            }
-        } catch (error) {
-            console.error('Erro ao buscar ranking:', error);
-            rankingTableBody.innerHTML = `<tr><td colspan="4">Não foi possível carregar o ranking.</td></tr>`;
-        }
+            rankingTableBody.innerHTML = '';
+            if (scores.length === 0) { rankingTableBody.innerHTML = `<tr><td colspan="4">Nenhuma pontuação registrada ainda.</td></tr>`; } 
+            else { scores.forEach((score, index) => { const row = rankingTableBody.insertRow(); const date = new Date(score.date).toLocaleDateString('pt-BR'); row.innerHTML = `<td>${index + 1}</td><td>${score.name || 'Anônimo'}</td><td>${score.timeSurvived}</td><td>${date}</td>`; }); }
+        } catch (error) { console.error('Erro ao buscar ranking:', error); rankingTableBody.innerHTML = `<tr><td colspan="4">Não foi possível carregar o ranking.</td></tr>`; }
     });
-    
     closeRankingBtn.addEventListener('click', () => rankingModal.style.display = 'none');
 
-    // --- ATUALIZADO: Listeners para o Modal de Configurações ---
+    // Listeners para o Modal de Configurações
     settingsBtn.addEventListener('click', () => { updateSettingsUI(); settingsModal.style.display = 'flex'; });
     saveSettingsBtn.addEventListener('click', () => { saveSettings(); applySettings(); settingsModal.style.display = 'none'; });
     fpsSelector.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { gameSettings.fps = parseInt(e.target.dataset.fps); updateSettingsUI(); } });

@@ -53,7 +53,7 @@ const ENEMY_SHOOT_DELAY_TICKS = 18;
 const SCALE_FACTOR = 1.33;
 const SCALE_DOWN_ATTR_FACTOR = 0.67;
 const SCALE_UP_SIZE_FACTOR = 1.65;
-const ENEMY_AND_PROJECTILE_SIZE_INCREASE = 1.3; // ATUALIZADO: Fator de 30%
+const ENEMY_AND_PROJECTILE_SIZE_INCREASE = 1.3;
 
 const AVAILABLE_PLAYER_COLORS = ['#FFD700', '#9400D3', '#32CD32', '#FF8C00'];
 
@@ -62,7 +62,7 @@ const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;
 const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;
 const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;
 
-// ATUALIZADO: Configs com tamanhos aumentados em 30%
+// Configs com tamanhos aumentados
 const ENEMY_SIZE_MOD = SCALE_UP_SIZE_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE;
 const WAVE_CONFIG = [
     { type: 'basic', color: '#FF4136', hp: Math.floor((72 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.04 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3600, width: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD },
@@ -82,44 +82,46 @@ const SNIPER_CONFIG = {
 };
 const WAVE_INTERVAL_SECONDS = 10;
 
-// --- Funções de escalonamento ---
-function getScalingFactor(wave) { /* ... (sem alterações) ... */ }
-function getWaveConfig(wave) { /* ... (sem alterações) ... */ }
-function getBossConfig(wave) { /* ... (sem alterações) ... */ }
-function getRicochetConfig(wave) { /* ... (sem alterações) ... */ }
-function findOrCreateRoom() { /* ... (sem alterações) ... */ }
-function spawnEnemy(room, waveConfig) { /* ... (sem alterações) ... */ }
-function spawnSniper(room, waveConfig) { /* ... (sem alterações) ... */ }
-function spawnRicochet(room, wave) { /* ... (sem alterações) ... */ }
-function spawnBoss(room, wave) { /* ... (sem alterações) ... */ }
+// --- Funções de escalonamento e spawn ---
+function getScalingFactor(wave) { if (wave <= 1) return 1.0; return 1.0 + Math.min(0.40, (wave - 1) * 0.05); }
+function getWaveConfig(wave) { const base = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1]; const scale = getScalingFactor(wave); return { ...base, hp: Math.floor(base.hp * scale), damage: Math.floor(base.damage * scale), projectileDamage: Math.floor(base.projectileDamage * scale) }; }
+function getBossConfig(wave) { const scale = getScalingFactor(wave); return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scale), damage: Math.floor(BOSS_CONFIG.damage * scale), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scale) }; }
+function getRicochetConfig(wave) { const scale = getScalingFactor(wave); return { ...RICOCHET_CONFIG, hp: Math.floor(RICOCHET_CONFIG.hp * scale), projectileDamage: Math.floor(RICOCHET_CONFIG.projectileDamage * scale) }; }
+function findOrCreateRoom() {
+    for (const name in rooms) { if (Object.keys(rooms[name].players).length < MAX_PLAYERS_PER_ROOM) return name; }
+    const newName = `room_${Date.now()}`;
+    rooms[newName] = { players: {}, enemies: [], enemyProjectiles: [], lightningStrikes: [], gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5, classShootingCooldowns: {}, bladeHits: {}, availableColors: [...AVAILABLE_PLAYER_COLORS] };
+    return newName;
+}
+function spawnEnemy(room, config) { room.enemies.push({ id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random()*(LOGICAL_WIDTH-config.width), y: -50, ...config, maxHp: config.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0, horizontalSpeed: config.speed / 2 }); }
+function spawnSniper(room, config) { const sniper = { id: `sniper_${Date.now()}_${Math.random()}`, x: Math.random() * (LOGICAL_WIDTH - SNIPER_CONFIG.width), y: -50, ...SNIPER_CONFIG, hp: config.hp * 0.8, maxHp: config.hp * 0.8, damage: config.damage * 0.5, projectileDamage: config.projectileDamage * 1.15, shootCooldown: config.shootCooldown * 1.3 * 1.2, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0 }; room.enemies.push(sniper); }
+function spawnRicochet(room, wave) { const config = getRicochetConfig(wave); room.enemies.push({ id: `ricochet_${Date.now()}_${Math.random()}`, x: Math.random() * (LOGICAL_WIDTH - config.width), y: -50, ...config, maxHp: config.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0 }); }
+function spawnBoss(room, wave) { const config = getBossConfig(wave); room.enemies.push({ id: `boss_${Date.now()}_${Math.random()}`, x: LOGICAL_WIDTH / 2 - config.width / 2, y: -config.height, ...config, maxHp: config.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0 }); }
 
 function shootForEnemy(enemy, room, targetPlayer) {
     if (!targetPlayer) return;
     const now = Date.now();
     enemy.lastShotTime = now;
-    // ATUALIZADO: Tamanho do jogador mantido como no original para mira
     const playerLogicalWidth = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
     const playerLogicalHeight = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
 
     let projectile = {
-        id: `ep_${now}_${Math.random()}`,
-        x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
+        id: `ep_${now}_${Math.random()}`, x: enemy.x + enemy.width / 2, y: enemy.y + enemy.height / 2,
         damage: enemy.projectileDamage, color: enemy.color, originId: enemy.id,
-        radius: (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE // ATUALIZADO
+        radius: (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE
     };
 
     if (enemy.isRicochet) {
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
         const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (virtualPlayerX + playerLogicalWidth/2) - projectile.x);
-        projectile.vx = Math.cos(angle) * ((14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR);
-        projectile.vy = Math.sin(angle) * ((14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR);
+        const speed = (14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR;
+        projectile.vx = Math.cos(angle) * speed; projectile.vy = Math.sin(angle) * speed;
         projectile.canRicochet = true; projectile.bouncesLeft = 1;
     } else {
         const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (targetPlayer.x + playerLogicalWidth/2) - projectile.x);
         const speed = enemy.isSniper ? ((16 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR) : ((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR);
-        projectile.vx = Math.cos(angle) * speed;
-        projectile.vy = Math.sin(angle) * speed;
+        projectile.vx = Math.cos(angle) * speed; projectile.vy = Math.sin(angle) * speed;
     }
     room.enemyProjectiles.push(projectile);
 }
@@ -132,24 +134,62 @@ setInterval(() => {
         if (playerList.length === 0) { delete rooms[roomName]; continue; }
         room.gameTime++;
 
-        // LÓGICA DE HORDAS E RAIOS ... (sem alterações)
-        // IA DOS INIMIGOS ... (sem alterações)
+        // LÓGICA DE HORDAS E SPAWN
+        if (room.gameTime > 1 && room.gameTime % 60 === 0) {
+            if (room.waveState === 'intermission') {
+                room.waveTimer--;
+                if (room.waveTimer <= 0) {
+                    room.wave++; room.waveState = 'active'; room.bladeHits = {};
+                    io.to(roomName).emit('waveStart', room.wave);
+                    const waveConfig = getWaveConfig(room.wave);
+                    const enemyCount = room.wave + 1;
+                    for (let i = 0; i < enemyCount; i++) { if (rooms[roomName]) spawnEnemy(room, waveConfig); }
+                    if (room.wave >= 3) { for (let i = 0; i < 1 + Math.floor((room.wave - 3) / 2); i++) spawnSniper(room, waveConfig); }
+                    if (room.wave >= 7 && (room.wave - 7) % 2 === 0) { for (let i = 0; i < Math.floor((room.wave - 7) / 2) + 1; i++) spawnRicochet(room, room.wave); }
+                    if (room.wave >= 10 && (room.wave - 10) % 3 === 0) { for (let i = 0; i < Math.floor((room.wave - 10) / 3) + 1; i++) spawnBoss(room, room.wave); }
+                }
+            } else if (room.waveState === 'active' && room.enemies.length === 0) {
+                room.waveState = 'intermission'; room.waveTimer = WAVE_INTERVAL_SECONDS;
+            }
+        }
+        
+        // LÓGICA DOS RAIOS
+        const LIGHTNING_INTERVAL_TICKS = Math.round(9 * (1000 / GAME_TICK_RATE));
+        const LIGHTNING_VISUAL_DURATION_TICKS = 30;
+        room.lightningStrikes = room.lightningStrikes.filter(s => room.gameTime < s.creationTime + LIGHTNING_VISUAL_DURATION_TICKS);
+        if (room.gameTime > 1 && room.gameTime % LIGHTNING_INTERVAL_TICKS === 0) {
+            playerList.filter(p => p.hasLightning).forEach(player => {
+                for (let i = 0; i < 3; i++) {
+                    const strikeX = Math.random() * LOGICAL_WIDTH; const strikeWidth = ((16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR) * 1.2;
+                    room.lightningStrikes.push({ id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime });
+                    room.enemies.forEach(enemy => { if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) { enemy.hp -= Math.floor(WAVE_CONFIG[0].hp * SCALE_DOWN_ATTR_FACTOR); } });
+                }
+                room.enemies = room.enemies.filter(enemy => {
+                    if (enemy.hp <= 0) { io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain: enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50)) }); return false; }
+                    return true;
+                });
+            });
+        }
 
-        // Projéteis inimigos
+        // IA DOS INIMIGOS
+        room.enemies.forEach(enemy => {
+            const targetPlayer = playerList.length > 0 ? playerList.sort((a,b) => Math.hypot(enemy.x-a.x, enemy.y-a.y) - Math.hypot(enemy.x-b.x, enemy.y-b.y))[0] : null;
+            let targetY; if (enemy.isSniper) targetY = SNIPER_LINE_Y; else if (enemy.isRicochet) targetY = RICOCHET_LINE_Y; else if (enemy.isBoss) targetY = BOSS_LINE_Y; else targetY = DEFENSE_LINE_Y;
+            if (!enemy.reachedPosition) { if (enemy.y < targetY) { enemy.y += enemy.speed; } else { enemy.y = targetY; enemy.baseY = targetY; enemy.reachedPosition = true; enemy.patrolOriginX = enemy.x; } } 
+            else { if (enemy.baseY) { enemy.y = enemy.baseY + Math.sin(room.gameTime * 0.05 + (enemy.id.charCodeAt(enemy.id.length-1)||0)%(Math.PI*2)) * 5; } const patrolSpeed = enemy.horizontalSpeed || enemy.speed/2; if (targetPlayer && !enemy.isRicochet) { enemy.x += Math.sign(targetPlayer.x - enemy.x) * patrolSpeed; } const patrolRange = LOGICAL_WIDTH * (enemy.isBoss ? 0.3 : 0.1); const left = enemy.patrolOriginX - (patrolRange/2); const right = enemy.patrolOriginX + (patrolRange/2); if (enemy.x < left) enemy.x = left; if (enemy.x > right - enemy.width) enemy.x = right - enemy.width; }
+            const now = Date.now(); if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) { if(room.gameTime >= (room.classShootingCooldowns[enemy.type] || 0)) { shootForEnemy(enemy, room, targetPlayer); room.classShootingCooldowns[enemy.type] = room.gameTime + ENEMY_SHOOT_DELAY_TICKS; } }
+        });
+
+        // PROJÉTEIS INIMIGOS E COLISÃO
         for (let i = room.enemyProjectiles.length - 1; i >= 0; i--) {
             const p = room.enemyProjectiles[i];
-            // ... (movimento e ricochete sem alterações) ...
+            if (p.canRicochet && p.bouncesLeft > 0 && (p.x <= 0 || p.x >= LOGICAL_WIDTH)) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH-1; }
             p.x += p.vx; p.y += p.vy;
-
-            if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) { room.enemyProjectiles.splice(i, 1); continue; }
-            
-            // ATUALIZADO: Tamanho do jogador mantido como no original para colisão
-            const playerLogicalWidth = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
-            const playerLogicalHeight = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
+            if (p.y > LOGICAL_HEIGHT+50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH+50) { room.enemyProjectiles.splice(i, 1); continue; }
+            const pW = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR; const pH = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
             for (const player of playerList) {
-                if (p.x > player.x && p.x < player.x + playerLogicalWidth && p.y > player.y && p.y < player.y + playerLogicalHeight) {
-                    io.to(player.id).emit('playerHit', p.damage);
-                    room.enemyProjectiles.splice(i, 1); break;
+                if (p.x > player.x && p.x < player.x + pW && p.y > player.y && p.y < player.y + pH) {
+                    io.to(player.id).emit('playerHit', p.damage); room.enemyProjectiles.splice(i, 1); break;
                 }
             }
         }
@@ -159,9 +199,56 @@ setInterval(() => {
 
 
 io.on('connection', (socket) => {
-    // TODA A LÓGICA DE CONEXÃO, UPDATE, HIT, etc., permanece a mesma.
-    // As novas regras de tamanho são definidas nos objetos de configuração e não alteram a lógica de eventos.
-    // ... (código de conexão do socket.io sem alterações) ...
+    socket.on('joinMultiplayer', (playerData) => {
+        const roomName = findOrCreateRoom();
+        socket.join(roomName); socket.room = roomName;
+        const room = rooms[roomName]; const color = room.availableColors.length > 0 ? room.availableColors.shift() : AVAILABLE_PLAYER_COLORS[Object.keys(room.players).length % AVAILABLE_PLAYER_COLORS.length];
+        room.players[socket.id] = { id: socket.id, ...playerData, hasAlly: false, hasLightning: false, hasTotalReaction: false, hasCorpseExplosion: false, corpseExplosionLevel: 0, color };
+        socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
+    });
+    socket.on('playerUpdate', (data) => { if (socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id] = { ...rooms[socket.room].players[socket.id], ...data }; } });
+    socket.on('playerShoot', (bulletData) => { if(socket.room) socket.to(socket.room).emit('playerShot', bulletData); });
+    socket.on('enemyHit', ({ enemyId, damage }) => {
+        const room = rooms[socket.room]; if (!room) return;
+        const enemy = room.enemies.find(e => e.id === enemyId);
+        if (enemy) {
+            enemy.hp -= damage;
+            if (enemy.hp <= 0) {
+                room.enemies = room.enemies.filter(e => e.id !== enemyId);
+                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain: enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50)) });
+            }
+        }
+    });
+    socket.on('playerUsedTotalReaction', () => { const room = rooms[socket.room]; if(room && room.players[socket.id]) room.bladeHits[socket.id] = []; });
+    socket.on('bladeHitEnemy', (enemyId) => {
+        const room = rooms[socket.room]; if (!room) return;
+        const player = room.players[socket.id]; const enemy = room.enemies.find(e => e.id === enemyId);
+        if (player && player.hasTotalReaction && enemy && room.bladeHits[socket.id] && !room.bladeHits[socket.id].includes(enemyId)) {
+            room.bladeHits[socket.id].push(enemyId);
+            enemy.hp -= enemy.maxHp * 0.7;
+            if (enemy.hp <= 0) {
+                 room.enemies = room.enemies.filter(e => e.id !== enemyId);
+                 io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain: enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50)) });
+            }
+        }
+    });
+    socket.on('enemyProjectileDestroyed', (id) => { if(socket.room && rooms[socket.room]) rooms[socket.room].enemyProjectiles = rooms[socket.room].enemyProjectiles.filter(p => p.id !== id); });
+    socket.on('playerGotAlly', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasAlly = true; });
+    socket.on('playerLostAlly', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasAlly = false; rooms[socket.room].players[socket.id].allyCooldownWave = rooms[socket.room].wave + 2; }});
+    socket.on('playerGotLightning', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasLightning = true; });
+    socket.on('playerGotCorpseExplosion', ({ level }) => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasCorpseExplosion = true; rooms[socket.room].players[socket.id].corpseExplosionLevel = level; } });
+    socket.on('playerGotTotalReaction', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasTotalReaction = true; });
+    socket.on('disconnect', () => {
+        const roomName = socket.room;
+        if (roomName && rooms[roomName]) {
+            const player = rooms[roomName].players[socket.id];
+            if (player && player.color) rooms[roomName].availableColors.unshift(player.color);
+            delete rooms[roomName].players[socket.id];
+            if(rooms[roomName].bladeHits) delete rooms[roomName].bladeHits[socket.id];
+            io.to(roomName).emit('playerLeft', socket.id);
+            if (Object.keys(rooms[roomName].players).length === 0) delete rooms[roomName];
+        }
+    });
 });
 
 async function startServer() {
