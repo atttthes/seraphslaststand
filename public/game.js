@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const NEON_GREEN = '#00ff7f';
     const SCALE_FACTOR = 1.33; // Fator de escala de 33% original
     const SCALE_DOWN_ATTR_FACTOR = 0.67; // Fator de redução de 33% para atributos
-    const SCALE_UP_SIZE_FACTOR = 1.40;   // Fator de aumento de 40% para tamanho
+    const SCALE_UP_SIZE_FACTOR = 1.65;   // ATUALIZADO: Fator de aumento de 65% para tamanho
 
     // --- Geometria do Chão ---
     const floorPath = [
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_LINE_Y = logicalHeight * 0.1 * 0.75;
 
     // --- CONFIGS DE HORDAS (Valores de HP e Dano) ---
-    // ATUALIZADO: Atributos reduzidos em 33%, tamanhos aumentados em 40%
+    // ATUALIZADO: Atributos reduzidos em 33%, tamanhos aumentados em 65%
     const WAVE_CONFIG = [
         { type: 'basic', color: '#FF4136', hp: Math.floor((72 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.04 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3600, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
         { type: 'basic', color: '#FF4136', hp: Math.floor((90 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3360, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
@@ -230,7 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const angle = Math.atan2((target.y + target.height / 2) - (this.y + this.height / 2), (target.x + target.width / 2) - (this.x + this.width / 2));
                 const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
                 projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
+                // ATUALIZADO: Emite o tiro do aliado para outros jogadores, incluindo a cor.
+                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage, color: '#FFFFFF' });
             }
         }
 

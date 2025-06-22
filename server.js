@@ -55,7 +55,7 @@ const GAME_TICK_RATE = 1000 / 60;
 const ENEMY_SHOOT_DELAY_TICKS = 18;
 const SCALE_FACTOR = 1.33; // Fator de escala de 33% original
 const SCALE_DOWN_ATTR_FACTOR = 0.67; // Fator de redução de 33% para atributos
-const SCALE_UP_SIZE_FACTOR = 1.40;   // Fator de aumento de 40% para tamanho
+const SCALE_UP_SIZE_FACTOR = 1.65;   // ATUALIZADO: Fator de aumento de 65% para tamanho
 
 // Cores disponíveis para jogadores no multiplayer
 const AVAILABLE_PLAYER_COLORS = ['#FFD700', '#9400D3', '#32CD32', '#FF8C00']; // Gold, DarkViolet, LimeGreen, DarkOrange
@@ -66,7 +66,7 @@ const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;
 const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;
 const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;
 
-// ATUALIZADO: Configs com atributos reduzidos em 33% e tamanhos aumentados em 40%
+// ATUALIZADO: Configs com atributos reduzidos em 33% e tamanhos aumentados em 65%
 const WAVE_CONFIG = [
     { type: 'basic', color: '#FF4136', hp: Math.floor((72 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.04 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3600, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
     { type: 'basic', color: '#FF4136', hp: Math.floor((90 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3360, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
