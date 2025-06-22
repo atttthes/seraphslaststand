@@ -271,11 +271,11 @@ document.addEventListener('DOMContentLoaded', () => {
             drawTrashCan(this.x, this.y, this.width, this.height, colorToDraw);
             const sX = (this.x + this.width / 2) * scaleX;
             const sY = this.y * scaleY;
-            ctx.fillStyle = 'white'; 
-            // ATUALIZADO: Tamanho da fonte aumentado em 700% (16 * 7 = 112) e offset ajustado
-            ctx.font = `${112 * Math.min(scaleX, scaleY)}px VT323`;
+            ctx.fillStyle = 'white';
+            // ATUALIZADO: Tamanho da fonte drasticamente reduzido para melhor visibilidade.
+            ctx.font = `${22 * Math.min(scaleX, scaleY)}px VT323`;
             ctx.textAlign = 'center'; 
-            ctx.fillText(this.name, sX, sY - (25 * scaleY));
+            ctx.fillText(this.name, sX, sY - (10 * scaleY)); // Offset ajustado para a nova fonte.
             if (this.ally) this.ally.draw();
         }
 
@@ -493,7 +493,20 @@ document.addEventListener('DOMContentLoaded', () => {
             for(const id in state.players) {
                 const pData = state.players[id];
                 if (id === socket.id) {
+                    // ATUALIZAÇÃO: Correção do bug da barra de vida em multiplayer.
+                    // Preservamos o HP e Escudo do cliente, pois o evento 'playerHit'
+                    // atualiza esses valores localmente e o 'gameState' do servidor pode estar
+                    // um tick atrasado, sobrescrevendo o dano recém-sofrido.
+                    const clientSideHP = player.hp;
+                    const clientSideShieldHP = player.shield.hp;
+
+                    // Aplica o estado do servidor (ex: upgrades como 'hasAlly') mas mantém a posição do cliente.
                     Object.assign(player, pData, { x: player.x, y: player.y });
+
+                    // Restaura os valores de HP e Escudo do cliente, que são considerados mais atuais.
+                    player.hp = clientSideHP;
+                    player.shield.hp = clientSideShieldHP;
+                    
                     if(pData.hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!pData.hasAlly && player.ally) player.ally = null;
                     continue;
@@ -718,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const damage = enemy.maxHp * 0.7; enemy.hp -= damage;
                     if (enemy.hp <= 0) {
                         createCorpseExplosion(enemy);
-                        setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50))); } }, 0);
+                        setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(enemy.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50))); } }, 0);
                     }
                 }
             }
