@@ -187,67 +187,68 @@ body, html {
 #shieldBar { background-color: var(--neon-cyan); width: 100%; }
 
 /* --- Controles Touch --- */
-#touchControls { display: none; } /* Escondido por padrão */
+#touchControls {
+    display: none; /* Escondido por padrão, ativado via JS se houver toque */
+    position: relative; /* Posicionado pelo app-wrapper */
+    width: 100%;
+    max-width: 95vw;
+    justify-content: space-between;
+    align-items: flex-end;
+    box-sizing: border-box;
+    z-index: 50;
+    pointer-events: none;
+}
 
-@media (hover: none) and (pointer: coarse) {
-    #touchControls {
-        display: flex;
-        position: relative; /* Posicionado pelo app-wrapper */
-        width: 100%;
-        max-width: 95vw;
-        justify-content: space-between;
-        align-items: flex-end;
-        box-sizing: border-box;
-        z-index: 50;
-        pointer-events: none;
-    }
+/* Mostra os controles em dispositivos com suporte a toque (classe adicionada por JS) */
+body.touch-enabled #touchControls {
+    display: flex;
+}
     
-    #left-controls, #right-controls {
-        display: flex;
-        align-items: flex-end;
-        gap: 20px;
-        pointer-events: all;
-    }
+#left-controls, #right-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    pointer-events: all;
+}
 
-    #moveControlsContainer { display: flex; gap: 20px; }
-    
-    .touch-move-btn {
-        width: 70px; height: 70px;
-        background-color: rgba(0, 255, 127, 0.15);
-        border: 2px solid var(--neon-green); color: var(--neon-green);
-        font-size: 2em; font-family: var(--main-font); border-radius: 50%;
-        display: flex; justify-content: center; align-items: center; user-select: none;
-    }
-    .touch-move-btn:active { background-color: rgba(0, 255, 127, 0.4); }
+#moveControlsContainer { display: flex; gap: 20px; }
 
-    #abilityControls { display: flex; flex-direction: column-reverse; gap: 10px; }
-    
-    .ability-btn {
-        width: 65px; height: 65px;
-        border-radius: 50%;
-        border: 3px solid #FFF;
-        background-color: rgba(255, 255, 255, 0.2);
-        color: #FFF; font-size: 2em; cursor: pointer;
-        text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
-        transition: all 0.3s;
-        display: flex; justify-content: center; align-items: center;
-    }
-    .ability-btn:disabled {
-        border-color: #555; background-color: rgba(85, 85, 85, 0.2);
-        color: #555; cursor: not-allowed; text-shadow: none;
-    }
-    
-    .joystick-container {
-        width: 110px; height: 110px;
-        background-color: rgba(0, 255, 127, 0.1);
-        border: 2px solid var(--neon-green); border-radius: 50%;
-        position: relative;
-    }
-    .joystick-knob {
-        width: 55px; height: 55px;
-        background-color: rgba(0, 255, 127, 0.3); border-radius: 50%;
-        position: absolute; top: 27.5px; left: 27.5px; transition: transform 0.1s;
-    }
+.touch-move-btn {
+    width: 70px; height: 70px;
+    background-color: rgba(0, 255, 127, 0.15);
+    border: 2px solid var(--neon-green); color: var(--neon-green);
+    font-size: 2em; font-family: var(--main-font); border-radius: 50%;
+    display: flex; justify-content: center; align-items: center; user-select: none;
+}
+.touch-move-btn:active { background-color: rgba(0, 255, 127, 0.4); }
+
+#abilityControls { display: flex; flex-direction: column-reverse; gap: 10px; }
+
+.ability-btn {
+    width: 65px; height: 65px;
+    border-radius: 50%;
+    border: 3px solid #FFF;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #FFF; font-size: 2em; cursor: pointer;
+    text-shadow: 0 0 8px #fff, 0 0 15px #fff, 0 0 25px var(--neon-green);
+    transition: all 0.3s;
+    display: flex; justify-content: center; align-items: center;
+}
+.ability-btn:disabled {
+    border-color: #555; background-color: rgba(85, 85, 85, 0.2);
+    color: #555; cursor: not-allowed; text-shadow: none;
+}
+
+.joystick-container {
+    width: 110px; height: 110px;
+    background-color: rgba(0, 255, 127, 0.1);
+    border: 2px solid var(--neon-green); border-radius: 50%;
+    position: relative;
+}
+.joystick-knob {
+    width: 55px; height: 55px;
+    background-color: rgba(0, 255, 127, 0.3); border-radius: 50%;
+    position: absolute; top: 27.5px; left: 27.5px; transition: transform 0.1s;
 }
 
 /* Modais (sem grandes alterações) */

@@ -1,5 +1,12 @@
 // game.js
 document.addEventListener('DOMContentLoaded', () => {
+    // --- DETECÇÃO DE DISPOSITIVO DE TOQUE ---
+    // Adiciona uma classe ao body se o dispositivo suportar toque, para o CSS poder mostrar os controles.
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (isTouchDevice) {
+        document.body.classList.add('touch-enabled');
+    }
+
     // --- ELEMENTOS DO DOM ---
     const mainMenu = document.getElementById('mainMenu');
     const appWrapper = document.getElementById('app-wrapper');
