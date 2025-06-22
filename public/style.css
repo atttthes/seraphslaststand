@@ -150,8 +150,8 @@ body, html {
 }
 #gameControls button {
     font-family: var(--main-font);
-    font-size: clamp(1.2em, 2vw, 1.8em);
-    padding: 8px 15px;
+    font-size: clamp(0.48em, 0.8vw, 0.72em); /* ATUALIZADO (redução 60%) */
+    padding: 3px 6px; /* ATUALIZADO (redução 60%) */
     border: 2px solid var(--dark-bg);
     background-color: var(--neon-green);
     color: var(--dark-bg);
@@ -165,9 +165,9 @@ body, html {
 
 #hpBarContainer, #expBarContainer, #shieldBarContainer {
     border: 2px solid var(--neon-green);
-    padding: 5px;
-    width: clamp(200px, 22vw, 280px);
-    height: clamp(25px, 3vh, 35px);
+    padding: 3px; /* Reduzido para melhor visual */
+    width: clamp(80px, 8.8vw, 112px); /* ATUALIZADO (redução 60%) */
+    height: clamp(10px, 1.2vh, 14px); /* ATUALIZADO (redução 60%) */
     background-color: rgba(0, 255, 127, 0.05);
     position: relative;
 }
@@ -175,9 +175,9 @@ body, html {
     color: var(--neon-green);
     position: absolute;
     top: 50%;
-    left: 10px;
+    left: 5px; /* Reduzido para caber */
     transform: translateY(-50%);
-    font-size: 1.1em;
+    font-size: 0.6em; /* ATUALIZADO (reduzido para caber) */
 }
 #hpBar, #expBar, #shieldBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }

@@ -92,16 +92,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 30, height: 50, isSniper: true, // TAMANHO ATUALIZADO
+        width: 8, height: 13, isSniper: true, // ATUALIZADO (redução 75%)
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
         type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 40, height: 40 // TAMANHO ATUALIZADO
+        shootCooldown: 4200, isRicochet: true, width: 10, height: 10 // ATUALIZADO (redução 75%)
     };
     const BOSS_CONFIG = {
         type: 'boss', color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 120, height: 120, isBoss: true // TAMANHO ATUALIZADO
+        projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true // ATUALIZADO (redução 75%)
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aCtx.strokeStyle = color;
         aCtx.shadowColor = color;
         aCtx.shadowBlur = 15;
-        aCtx.lineWidth = 3;
+        aCtx.lineWidth = Math.max(1, width / 15); // Linha se ajusta ao tamanho
 
         const bodyHeight = height * 0.85;
         const lidHeight = height * 0.15;
@@ -230,11 +230,12 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 40; this.height = 55; // TAMANHO ATUALIZADO
-            this.velocityY = 0; this.speed = 7;
+            this.width = 10; this.height = 14; // ATUALIZADO (redução 75%)
+            this.velocityY = 0;
+            this.speed = 2.1; // ATUALIZADO (redução 70%)
             this.jumpForce = 15; this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
-            this.shootCooldown = 180;
+            this.shootCooldown = 300; // ATUALIZADO (cadência 40% menor)
             this.bulletDamage = 70;
             
             this.isInvincible = false; this.invincibleTime = 500;
@@ -275,8 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const color = this.isInvincible ? 'rgba(0, 255, 127, 0.5)' : NEON_GREEN;
             drawTrashCan(this.x, this.y, this.width, this.height, color);
 
-            ctx.fillStyle = 'white'; ctx.font = '20px VT323';
-            ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 15);
+            ctx.fillStyle = 'white'; ctx.font = '12px VT323'; // Reduzido para caber
+            ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 8);
             if (this.ally) this.ally.draw();
         }
 
@@ -354,16 +355,16 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.save();
             ctx.strokeStyle = this.color;
             ctx.shadowColor = this.color;
-            ctx.shadowBlur = 15;
-            ctx.lineWidth = 3;
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = Math.max(1, this.width / 15);
             ctx.strokeRect(this.x, this.y, this.width, this.height);
             ctx.restore();
 
             const hpRatio = this.hp / this.maxHp;
             ctx.fillStyle = '#555';
-            ctx.fillRect(this.x, this.y - 10, this.width, 5);
+            ctx.fillRect(this.x, this.y - 8, this.width, 3);
             ctx.fillStyle = hpRatio > 0.5 ? 'lightgreen' : hpRatio > 0.2 ? 'gold' : 'red';
-            ctx.fillRect(this.x, this.y - 10, this.width * hpRatio, 5);
+            ctx.fillRect(this.x, this.y - 8, this.width * hpRatio, 3);
         }
 
         update() {
@@ -794,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const waveConfig = getSPWaveConfig(spState.wave);
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
-                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 40), y: -50, width: 40, height: 40, horizontalSpeed: waveConfig.speed / 2 }; // TAMANHO ATUALIZADO
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 10), y: -50, width: 10, height: 10, horizontalSpeed: waveConfig.speed / 2 }; // ATUALIZADO
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
