@@ -53,7 +53,9 @@ const LOGICAL_WIDTH = 1600;
 const LOGICAL_HEIGHT = 900;
 const GAME_TICK_RATE = 1000 / 60;
 const ENEMY_SHOOT_DELAY_TICKS = 18;
-const SCALE_FACTOR = 1.33; // Fator de escala de 33%
+const SCALE_FACTOR = 1.33; // Fator de escala de 33% original
+const SCALE_DOWN_ATTR_FACTOR = 0.67; // Fator de redução de 33% para atributos
+const SCALE_UP_SIZE_FACTOR = 1.40;   // Fator de aumento de 40% para tamanho
 
 // Cores disponíveis para jogadores no multiplayer
 const AVAILABLE_PLAYER_COLORS = ['#FFD700', '#9400D3', '#32CD32', '#FF8C00']; // Gold, DarkViolet, LimeGreen, DarkOrange
@@ -64,22 +66,22 @@ const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;
 const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;
 const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;
 
-// ATUALIZADO: Configs com tamanho e atributos aumentados em 33%
+// ATUALIZADO: Configs com atributos reduzidos em 33% e tamanhos aumentados em 40%
 const WAVE_CONFIG = [
-    { type: 'basic', color: '#FF4136', hp: Math.floor(72 * SCALE_FACTOR), speed: 1.04 * SCALE_FACTOR, damage: Math.floor(15 * SCALE_FACTOR), projectileDamage: Math.floor(10 * SCALE_FACTOR), shootCooldown: 3600, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
-    { type: 'basic', color: '#FF4136', hp: Math.floor(90 * SCALE_FACTOR), speed: 1.12 * SCALE_FACTOR, damage: Math.floor(18 * SCALE_FACTOR), projectileDamage: Math.floor(12 * SCALE_FACTOR), shootCooldown: 3360, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
-    { type: 'basic', color: '#FF4136', hp: Math.floor(120 * SCALE_FACTOR), speed: 1.2 * SCALE_FACTOR, damage: Math.floor(22 * SCALE_FACTOR), projectileDamage: Math.floor(15 * SCALE_FACTOR), shootCooldown: 3000, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
-    { type: 'basic', color: '#FF4136', hp: Math.floor(168 * SCALE_FACTOR), speed: 1.28 * SCALE_FACTOR, damage: Math.floor(25 * SCALE_FACTOR), projectileDamage: Math.floor(18 * SCALE_FACTOR), shootCooldown: 2640, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
-    { type: 'basic', color: '#FF4136', hp: Math.floor(210 * SCALE_FACTOR), speed: 1.36 * SCALE_FACTOR, damage: Math.floor(30 * SCALE_FACTOR), projectileDamage: Math.floor(22 * SCALE_FACTOR), shootCooldown: 2400, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR }
+    { type: 'basic', color: '#FF4136', hp: Math.floor((72 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.04 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3600, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
+    { type: 'basic', color: '#FF4136', hp: Math.floor((90 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3360, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
+    { type: 'basic', color: '#FF4136', hp: Math.floor((120 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.2 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((22 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 3000, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
+    { type: 'basic', color: '#FF4136', hp: Math.floor((168 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.28 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((25 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 2640, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR },
+    { type: 'basic', color: '#FF4136', hp: Math.floor((210 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.36 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((30 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((22 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 2400, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR }
 ];
 const BOSS_CONFIG = {
-    type: 'boss', color: '#FFFFFF', hp: Math.floor(300 * SCALE_FACTOR), speed: 0.8 * SCALE_FACTOR, damage: Math.floor(50 * SCALE_FACTOR), projectileDamage: Math.floor(35 * SCALE_FACTOR), shootCooldown: 1440, width: 30 * SCALE_FACTOR, height: 30 * SCALE_FACTOR, isBoss: true
+    type: 'boss', color: '#FFFFFF', hp: Math.floor((300 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (0.8 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((50 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((35 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 1440, width: (30 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (30 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, isBoss: true
 };
 const RICOCHET_CONFIG = {
-    type: 'ricochet', color: '#FF69B4', hp: Math.floor(150 * SCALE_FACTOR), speed: 0.96 * SCALE_FACTOR, horizontalSpeed: 0.6 * SCALE_FACTOR, projectileDamage: Math.floor(20 * SCALE_FACTOR), shootCooldown: 4200, isRicochet: true, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR
+    type: 'ricochet', color: '#FF69B4', hp: Math.floor((150 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (0.96 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, horizontalSpeed: (0.6 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, projectileDamage: Math.floor((20 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 4200, isRicochet: true, width: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (10 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR
 };
 const SNIPER_CONFIG = {
-    type: 'sniper', color: '#00FFFF', speed: 0.8 * SCALE_FACTOR, horizontalSpeed: 0.5 * SCALE_FACTOR, isSniper: true, width: 8 * SCALE_FACTOR, height: 13 * SCALE_FACTOR
+    type: 'sniper', color: '#00FFFF', speed: (0.8 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, horizontalSpeed: (0.5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, isSniper: true, width: (8 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR, height: (13 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR
 };
 const WAVE_INTERVAL_SECONDS = 10;
 
@@ -132,7 +134,7 @@ function findOrCreateRoom() {
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
         classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 },
         bladeHits: {},
-        availableColors: [...AVAILABLE_PLAYER_COLORS] // ATUALIZADO: Adiciona cores à sala
+        availableColors: [...AVAILABLE_PLAYER_COLORS]
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -180,7 +182,7 @@ function spawnBoss(room, wave) {
     room.enemies.push({
         id: `boss_${Date.now()}_${Math.random()}`,
         x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height,
-        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 0.96 * SCALE_FACTOR,
+        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: (0.96 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR,
         maxHp: bossConfig.hp, lastShotTime: 0,
         patrolOriginX: null, reachedPosition: false, baseY: 0,
     });
@@ -191,9 +193,9 @@ function shootForEnemy(enemy, room, targetPlayer) {
 
     const now = Date.now();
     enemy.lastShotTime = now;
-    // ATUALIZADO: Tamanho lógico do jogador para mira
-    const playerLogicalWidth = 16 * SCALE_FACTOR;
-    const playerLogicalHeight = 22 * SCALE_FACTOR;
+    // ATUALIZADO: Tamanho lógico do jogador (aumentado) para mira
+    const playerLogicalWidth = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
+    const playerLogicalHeight = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
 
     let projectile = {
         id: `ep_${now}_${Math.random()}`,
@@ -202,20 +204,20 @@ function shootForEnemy(enemy, room, targetPlayer) {
         damage: enemy.projectileDamage,
         color: enemy.color,
         originId: enemy.id,
-        radius: 5 * SCALE_FACTOR // ATUALIZADO: Raio do projétil
+        radius: (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR // ATUALIZADO: Raio do projétil reduzido
     };
 
     if (enemy.isRicochet) {
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
         const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (virtualPlayerX + playerLogicalWidth/2) - projectile.x);
-        projectile.vx = Math.cos(angle) * (14 * SCALE_FACTOR); // Velocidade lógica
-        projectile.vy = Math.sin(angle) * (14 * SCALE_FACTOR);
+        projectile.vx = Math.cos(angle) * ((14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR); // Velocidade lógica reduzida
+        projectile.vy = Math.sin(angle) * ((14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR);
         projectile.canRicochet = true;
         projectile.bouncesLeft = 1;
     } else {
         const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (targetPlayer.x + playerLogicalWidth/2) - projectile.x);
-        const speed = enemy.isSniper ? (16 * SCALE_FACTOR) : (10 * SCALE_FACTOR); // Velocidades lógicas
+        const speed = enemy.isSniper ? ((16 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR) : ((10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR); // Velocidades lógicas reduzidas
         projectile.vx = Math.cos(angle) * speed;
         projectile.vy = Math.sin(angle) * speed;
     }
@@ -272,7 +274,7 @@ setInterval(() => {
 
         // LÓGICA DO RAIO
         const LIGHTNING_INTERVAL_TICKS = Math.round(9 * (1000 / GAME_TICK_RATE));
-        const LIGHTNING_DAMAGE = WAVE_CONFIG[0].hp;
+        const LIGHTNING_DAMAGE = Math.floor(WAVE_CONFIG[0].hp * SCALE_DOWN_ATTR_FACTOR); // Dano reduzido
         const LIGHTNING_VISUAL_DURATION_TICKS = 30;
 
         room.lightningStrikes = room.lightningStrikes.filter(strike =>
@@ -284,7 +286,7 @@ setInterval(() => {
             lightningPlayers.forEach(player => {
                 for (let i = 0; i < 3; i++) {
                     const strikeX = Math.random() * LOGICAL_WIDTH;
-                    const strikeWidth = (16 * SCALE_FACTOR) * 1.2; // Baseado no tamanho lógico do player
+                    const strikeWidth = ((16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR) * 1.2; // ATUALIZADO: Baseado no novo tamanho do player
                     room.lightningStrikes.push({
                         id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime,
                     });
@@ -365,10 +367,10 @@ setInterval(() => {
             if (p.y > LOGICAL_HEIGHT + 50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH + 50) {
                 room.enemyProjectiles.splice(i, 1); continue;
             }
+            // ATUALIZADO: Tamanho do jogador para colisão
+            const playerLogicalWidth = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
+            const playerLogicalHeight = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
             for (const player of playerList) {
-                // ATUALIZADO: Colisão lógica projétil-jogador
-                const playerLogicalWidth = 16 * SCALE_FACTOR;
-                const playerLogicalHeight = 22 * SCALE_FACTOR;
                 if (p.x > player.x && p.x < player.x + playerLogicalWidth && p.y > player.y && p.y < player.y + playerLogicalHeight) {
                     io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1); break;
@@ -390,7 +392,6 @@ io.on('connection', (socket) => {
         socket.room = roomName;
 
         const room = rooms[roomName];
-        // ATUALIZADO: Atribui uma cor ao jogador
         const color = room.availableColors.length > 0 ? room.availableColors.shift() : AVAILABLE_PLAYER_COLORS[Object.keys(room.players).length % AVAILABLE_PLAYER_COLORS.length];
         
         room.players[socket.id] = {
@@ -453,7 +454,6 @@ io.on('connection', (socket) => {
 
             room.bladeHits[socket.id].push(enemyId);
 
-            // ATUALIZADO: "Reação Total" causa 70% da vida máxima do inimigo como dano.
             const damage = enemy.maxHp * 0.7;
             enemy.hp -= damage;
 
@@ -512,7 +512,6 @@ io.on('connection', (socket) => {
         console.log('Jogador desconectado:', socket.id);
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
-            // ATUALIZADO: Devolve a cor do jogador para a sala
             const player = rooms[roomName].players[socket.id];
             if (player && player.color) {
                 rooms[roomName].availableColors.unshift(player.color);
