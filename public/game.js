@@ -512,9 +512,62 @@ document.addEventListener('DOMContentLoaded', () => {
         aimOpacityValue.textContent = `${gameSettings.aimOpacity}%`;
     }
 
+    // CORREÇÃO: Função `setupTouchControls` foi definida e implementada.
+    function setupTouchControls() {
+        if (!isTouchDevice) return;
+    
+        // Lógica para os botões de movimento e pulo
+        touchLeftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.a.pressed = true; }, { passive: false });
+        touchLeftBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.a.pressed = false; });
+    
+        touchRightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.d.pressed = true; }, { passive: false });
+        touchRightBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.d.pressed = false; });
+    
+        touchJumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (player) player.jump(); }, { passive: false });
+    
+        // Lógica para o joystick de mira
+        let joystickActive = false;
+        let joystickStartX = 0;
+        let joystickStartY = 0;
+    
+        aimJoystick.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            joystickActive = true;
+            aimStick.active = true;
+            const touch = e.touches[0];
+            const rect = aimJoystick.getBoundingClientRect();
+            joystickStartX = rect.left + rect.width / 2;
+            joystickStartY = rect.top + rect.height / 2;
+        }, { passive: false });
+    
+        aimJoystick.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystickActive || !e.touches[0]) return;
+            const touch = e.touches[0];
+            const dx = touch.clientX - joystickStartX;
+            const dy = touch.clientY - joystickStartY;
+            aimStick.angle = Math.atan2(dy, dx);
+    
+            const maxMove = aimJoystick.offsetWidth / 2 - aimJoystickKnob.offsetWidth / 2;
+            const distance = Math.min(maxMove, Math.hypot(dx, dy));
+            const moveX = Math.cos(aimStick.angle) * distance;
+            const moveY = Math.sin(aimStick.angle) * distance;
+            aimJoystickKnob.style.transform = `translate(${moveX}px, ${moveY}px)`;
+    
+        }, { passive: false });
+    
+        const resetJoystick = (e) => {
+            e.preventDefault();
+            joystickActive = false;
+            aimStick.active = false;
+            aimJoystickKnob.style.transform = 'translate(0px, 0px)';
+        };
+        aimJoystick.addEventListener('touchend', resetJoystick);
+        aimJoystick.addEventListener('touchcancel', resetJoystick);
+    }
+
     // --- EVENT LISTENERS ---
-    /* ... (ouvintes de teclado e mouse sem alterações) ... */
-    setupTouchControls();
+    setupTouchControls(); // A chamada agora tem uma função para executar e não quebra o script
     startSinglePlayerBtn.addEventListener('click', () => startGame(false));
     startMultiplayerBtn.addEventListener('click', () => startGame(true));
     restartBtn.addEventListener('click', () => startGame(isMultiplayer));
@@ -523,7 +576,40 @@ document.addEventListener('DOMContentLoaded', () => {
     pauseBtn.addEventListener('click', () => { if (isMultiplayer) return; isPaused = !isPaused; pauseBtn.textContent = isPaused ? '▶' : '❚❚'; });
     rerollUpgradesBtn.addEventListener('click', () => { if (player && player.rerolls > 0) { player.rerolls--; showUpgradeModal(); } });
     totalReactionBtn.addEventListener('click', () => { if (player && player.totalReactionReady) { player.totalReactionReady = false; player.currentReactionCooldown = player.totalReactionCooldown + 1; reactionBlade = { active: true, x: 0, y: player.y, width: player.width, height: 15, hitEnemies: [] }; if (isMultiplayer) socket.emit('playerUsedTotalReaction'); updateUI(); } });
-    showRankingBtn.addEventListener('click', async () => { /* ... (sem alterações) ... */ });
+    
+    // CORREÇÃO: Lógica do botão de ranking foi implementada
+    showRankingBtn.addEventListener('click', async () => {
+        try {
+            rankingTableBody.innerHTML = '<tr><td colspan="4">Carregando...</td></tr>';
+            rankingModal.style.display = 'flex';
+            
+            const response = await fetch('/api/ranking');
+            if (!response.ok) {
+                throw new Error(`Falha ao carregar o ranking (status: ${response.status})`);
+            }
+            const scores = await response.json();
+            
+            rankingTableBody.innerHTML = ''; // Limpa a tabela
+            if (scores.length === 0) {
+                rankingTableBody.innerHTML = `<tr><td colspan="4">Nenhuma pontuação registrada ainda.</td></tr>`;
+            } else {
+                scores.forEach((score, index) => {
+                    const row = rankingTableBody.insertRow();
+                    const date = new Date(score.date).toLocaleDateString('pt-BR');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${score.name || 'Anônimo'}</td>
+                        <td>${score.timeSurvived}</td>
+                        <td>${date}</td>
+                    `;
+                });
+            }
+        } catch (error) {
+            console.error('Erro ao buscar ranking:', error);
+            rankingTableBody.innerHTML = `<tr><td colspan="4">Não foi possível carregar o ranking.</td></tr>`;
+        }
+    });
+    
     closeRankingBtn.addEventListener('click', () => rankingModal.style.display = 'none');
 
     // --- ATUALIZADO: Listeners para o Modal de Configurações ---
@@ -531,8 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
     saveSettingsBtn.addEventListener('click', () => { saveSettings(); applySettings(); settingsModal.style.display = 'none'; });
     fpsSelector.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { gameSettings.fps = parseInt(e.target.dataset.fps); updateSettingsUI(); } });
     effectsToggle.addEventListener('change', (e) => { gameSettings.effectsOn = e.target.checked; });
-    uiOpacitySlider.addEventListener('input', (e) => { gameSettings.uiOpacity = parseInt(e.target.value); uiOpacityValue.textContent = `${gameSettings.uiOpacity}%`; document.documentElement.style.setProperty('--ui-opacity', gameSettings.uiOpacity / 100); });
-    aimOpacitySlider.addEventListener('input', (e) => { gameSettings.aimOpacity = parseInt(e.target.value); aimOpacityValue.textContent = `${gameSettings.aimOpacity}%`; });
+    uiOpacitySlider.addEventListener('input', (e) => { gameSettings.uiOpacity = parseInt(e.target.value); uiOpacityValue.textContent = `${e.target.value}%`; document.documentElement.style.setProperty('--ui-opacity', e.target.value / 100); });
+    aimOpacitySlider.addEventListener('input', (e) => { gameSettings.aimOpacity = parseInt(e.target.value); aimOpacityValue.textContent = `${e.target.value}%`; });
 
     // --- Inicialização ---
     loadSettings();

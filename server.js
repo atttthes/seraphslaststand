@@ -18,8 +18,30 @@ app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); }
 app.use(express.static(__dirname));
 
 // --- API para o Ranking ---
-app.get('/api/ranking', async (req, res) => { /* ... (sem alterações) ... */ });
-app.post('/api/ranking', async (req, res) => { /* ... (sem alterações) ... */ });
+app.get('/api/ranking', async (req, res) => {
+    try {
+        const scores = await db.getTopScores(10);
+        res.json(scores);
+    } catch (err) {
+        console.error("Erro ao buscar ranking:", err);
+        res.status(500).json({ error: "Erro ao buscar ranking" });
+    }
+});
+
+app.post('/api/ranking', async (req, res) => {
+    try {
+        const { name, timeSurvived } = req.body;
+        if (!name || typeof timeSurvived !== 'number') {
+            return res.status(400).json({ error: "Dados inválidos." });
+        }
+        await db.addScore(name, timeSurvived);
+        res.status(201).json({ message: "Pontuação adicionada com sucesso!" });
+    } catch (err) {
+        console.error("Erro ao adicionar pontuação:", err);
+        res.status(500).json({ error: "Erro ao adicionar pontuação" });
+    }
+});
+
 
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
