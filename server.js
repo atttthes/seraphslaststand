@@ -88,6 +88,15 @@ const WAVE_INTERVAL_SECONDS = 10;
 
 // ATUALIZADO: Adicionada função de colisão no servidor
 function checkCollision(obj1, obj2) {
+    // Circle vs Circle collision
+    if (obj1.radius && obj2.radius) {
+        const dx = obj1.x - obj2.x;
+        const dy = obj1.y - obj2.y;
+        const distance = Math.hypot(dx, dy);
+        return distance < obj1.radius + obj2.radius;
+    }
+
+    // AABB (Rectangle vs Rectangle or Rectangle vs Circle)
     const r1 = obj1.radius || 0;
     const r2 = obj2.radius || 0;
     const w1 = obj1.width || 0;
@@ -95,14 +104,14 @@ function checkCollision(obj1, obj2) {
     const w2 = obj2.width || 0;
     const h2 = obj2.height || 0;
 
-    const obj1Left = obj1.x - r1;
+    const obj1Left = obj1.x - (obj1.radius ? obj1.radius : 0);
     const obj1Right = obj1.x + (w1 || r1);
-    const obj1Top = obj1.y - r1;
+    const obj1Top = obj1.y - (obj1.radius ? obj1.radius : 0);
     const obj1Bottom = obj1.y + (h1 || r1);
 
-    const obj2Left = obj2.x - r2;
+    const obj2Left = obj2.x - (obj2.radius ? obj2.radius : 0);
     const obj2Right = obj2.x + (w2 || r2);
-    const obj2Top = obj2.y - r2;
+    const obj2Top = obj2.y - (obj2.radius ? obj2.radius : 0);
     const obj2Bottom = obj2.y + (h2 || r2);
 
     return (obj1Left < obj2Right && obj1Right > obj2Left && obj1Top < obj2Bottom && obj1Bottom > obj2Top);
@@ -229,9 +238,12 @@ setInterval(() => {
                 // Lógica de colisão do escudo
                 if (player.shield && player.shield.active) {
                     const shieldRadius = player.hasAlly ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
-                    const dx = p.x - (player.x + player.width / 2);
-                    const dy = p.y - (player.y + player.height / 2);
-                    if (Math.hypot(dx, dy) < shieldRadius + p.radius) {
+                    const shieldHitbox = {
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        radius: shieldRadius
+                    };
+                     if (checkCollision(p, shieldHitbox)) {
                         player.shield.hp -= p.damage;
                         if(player.shield.hp <= 0) player.shield.active = false;
                         room.enemyProjectiles.splice(i, 1);
@@ -278,7 +290,7 @@ setInterval(() => {
 
             for (let j = room.enemies.length - 1; j >= 0; j--) {
                 const enemy = room.enemies[j];
-                if (p.x > enemy.x && p.x < enemy.x + enemy.width && p.y > enemy.y && p.y < enemy.y + enemy.height) {
+                if (checkCollision(p, enemy)) {
                     enemy.hp -= p.damage;
                     room.playerProjectiles.splice(i, 1);
 
@@ -289,6 +301,26 @@ setInterval(() => {
                         io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId, expGain });
                     }
                     break;
+                }
+            }
+        }
+        
+        // ATUALIZAÇÃO: COLISÃO ENTRE PROJÉTEIS DE JOGADOR E INIMIGO
+        for (let i = room.playerProjectiles.length - 1; i >= 0; i--) {
+            for (let j = room.enemyProjectiles.length - 1; j >= 0; j--) {
+                const p_proj = room.playerProjectiles[i];
+                const e_proj = room.enemyProjectiles[j];
+
+                if (!p_proj) continue; // Projétil do jogador já foi destruído neste quadro.
+
+                if (checkCollision(p_proj, e_proj)) {
+                    // Colisão detectada, remover ambos os projéteis
+                    room.playerProjectiles.splice(i, 1);
+                    room.enemyProjectiles.splice(j, 1);
+                    
+                    // Como o projétil do jogador 'i' foi destruído,
+                    // podemos parar de verificar colisões para ele e ir para o próximo.
+                    break; 
                 }
             }
         }
@@ -360,7 +392,8 @@ io.on('connection', (socket) => {
         const room = rooms[socket.room]; 
         if(room && room.players[socket.id]) {
             const player = room.players[socket.id];
-            player.bladeHits[socket.id] = []; 
+            if (!room.bladeHits) room.bladeHits = {};
+            room.bladeHits[socket.id] = []; 
             player.totalReactionReady = false;
             player.currentReactionCooldown = player.totalReactionCooldown + 1;
         }
@@ -369,7 +402,7 @@ io.on('connection', (socket) => {
     socket.on('bladeHitEnemy', (enemyId) => {
         const room = rooms[socket.room]; if (!room) return;
         const player = room.players[socket.id]; const enemy = room.enemies.find(e => e.id === enemyId);
-        if (player && player.hasTotalReaction && enemy && room.bladeHits[socket.id] && !room.bladeHits[socket.id].includes(enemyId)) {
+        if (player && player.hasTotalReaction && enemy && room.bladeHits && room.bladeHits[socket.id] && !room.bladeHits[socket.id].includes(enemyId)) {
             room.bladeHits[socket.id].push(enemyId);
             enemy.hp -= enemy.maxHp * 0.7;
             if (enemy.hp <= 0) {

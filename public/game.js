@@ -476,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, pData.ownerId);
                         newProj.id = pData.id;
-                        newProj.velocity = {x: 0, y: 0}; 
+                        newProj.velocity = {x: pData.vx, y: pData.vy}; 
                         projectiles.push(newProj);
                     }
                 });
@@ -486,24 +486,18 @@ document.addEventListener('DOMContentLoaded', () => {
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
                 if (!p) { const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, 'enemy', pData.originId); newProj.id = pData.id; newProj.velocity.x = pData.vx; newProj.velocity.y = pData.vy; newProj.radius = pData.radius; enemyProjectiles.push(newProj); } 
-                else { p.x = pData.x; p.y = pData.y; }
+                else { p.x = pData.x; p.y = pData.y; p.velocity.x = pData.vx; p.velocity.y = pData.vy; }
             });
             
             const currentOtherPlayerIds = new Set();
             for(const id in state.players) {
                 const pData = state.players[id];
                 if (id === socket.id) {
-                    // ATUALIZAÇÃO: Correção do bug da barra de vida em multiplayer.
-                    // Preservamos o HP e Escudo do cliente, pois o evento 'playerHit'
-                    // atualiza esses valores localmente e o 'gameState' do servidor pode estar
-                    // um tick atrasado, sobrescrevendo o dano recém-sofrido.
                     const clientSideHP = player.hp;
                     const clientSideShieldHP = player.shield.hp;
 
-                    // Aplica o estado do servidor (ex: upgrades como 'hasAlly') mas mantém a posição do cliente.
                     Object.assign(player, pData, { x: player.x, y: player.y });
 
-                    // Restaura os valores de HP e Escudo do cliente, que são considerados mais atuais.
                     player.hp = clientSideHP;
                     player.shield.hp = clientSideShieldHP;
                     
@@ -527,7 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         socket.on('playerHit', (damage) => player.takeDamage(damage));
         
-        // ATUALIZADO: Adicionado listener para dano no aliado
         socket.on('allyHit', (damage) => {
             if (player && player.ally) {
                 player.ally.takeDamage(damage);
@@ -672,15 +665,10 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(otherPlayers).forEach(p => p.draw());
         lightningStrikes.forEach(strike => { for(let i=0; i<3; i++) drawLightning(strike.x, strike.width); });
         
-        // ATUALIZAÇÃO: Lógica de movimento de projéteis dividida
         projectiles.forEach((p, i) => {
-            if (!isMultiplayer) {
-                p.update(); // Cliente move em SP
-                if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) {
-                    projectiles.splice(i, 1);
-                }
-            } else {
-                p.draw(); // Cliente só desenha em MP, posição vem do servidor
+            p.update(); 
+            if (!isMultiplayer && (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight)) {
+                projectiles.splice(i, 1);
             }
         });
         
@@ -694,8 +682,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     p.x = p.x <= 0 ? 1 : logicalWidth - 1;
                 }
                 p.update(); 
+                if (p.x < -50 || p.x > logicalWidth+50 || p.y < -50 || p.y > logicalHeight+50) { 
+                    enemyProjectiles.splice(i, 1);
+                }
             } else { p.draw(); }
-            if (p.x < -50 || p.x > logicalWidth+50 || p.y < -50 || p.y > logicalHeight+50) { if (!isMultiplayer) enemyProjectiles.splice(i, 1); }
         });
 
         if (reactionBlade.active) {
@@ -708,7 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
             const p = enemyProjectiles[i];
-            if (reactionBlade.active && checkCollision(p, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
+            if (reactionBlade.active && checkCollision(p, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height, radius: 0})) {
                 const originEnemy = enemies.find(e => e.id === p.originId);
                 if (originEnemy) {
                     const angle = Math.atan2(originEnemy.y - p.y, originEnemy.x - p.x);
@@ -724,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         enemies.forEach((enemy) => {
             enemy.update();
-            if (reactionBlade.active && !reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height})) {
+            if (reactionBlade.active && !reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height, radius: 0})) {
                 reactionBlade.hitEnemies.push(enemy.id);
                 if (isMultiplayer) { socket.emit('bladeHitEnemy', enemy.id); } 
                 else {
@@ -738,22 +728,42 @@ document.addEventListener('DOMContentLoaded', () => {
             if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
             if (player.ally && checkCollision(player.ally, enemy)) player.ally.takeDamage(enemy.damage);
             
-            // ATUALIZAÇÃO: Colisão projétil-inimigo só é checada pelo cliente em single-player
             if (!isMultiplayer) {
                 for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
                     const proj = projectiles[projIndex];
                     if((proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
                         enemy.hp -= proj.damage;
+                        projectiles.splice(projIndex, 1);
                         if(enemy.hp <= 0) {
                             if(proj.owner !== 'corpse_explosion') createCorpseExplosion(enemy);
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); } }, 0);
                         }
-                        projectiles.splice(projIndex, 1);
                     }
                 }
             }
         });
+        
+        // ATUALIZAÇÃO: Colisão entre projéteis (Single-Player)
+        if (!isMultiplayer) {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
+                    const p_proj = projectiles[i];
+                    const e_proj = enemyProjectiles[j];
+
+                    if (!p_proj) continue; // Projétil já foi removido neste quadro
+
+                    if (checkCollision(p_proj, e_proj)) {
+                        // Colisão, remove ambos
+                        projectiles.splice(i, 1);
+                        enemyProjectiles.splice(j, 1);
+
+                        // Sai do loop interno, pois o projétil do jogador 'i' não existe mais
+                        break;
+                    }
+                }
+            }
+        }
         
         updateUI();
     }
@@ -768,11 +778,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkCollision(obj1, obj2) {
-        const r1 = obj1.radius || 0; const r2 = obj2.radius || 0; const w1 = obj1.width || 0; const h1 = obj1.height || 0; const w2 = obj2.width || 0; const h2 = obj2.height || 0;
-        const obj1Left = obj1.x - r1; const obj1Right = obj1.x + (w1 || r1); const obj1Top = obj1.y - r1; const obj1Bottom = obj1.y + (h1 || r1);
-        const obj2Left = obj2.x - r2; const obj2Right = obj2.x + (w2 || r2); const obj2Top = obj2.y - r2; const obj2Bottom = obj2.y + (h2 || r2);
+        // Circle vs Circle
+        if (obj1.radius && obj2.radius) {
+            const dx = (obj1.x + (obj1.width || 0) / 2) - (obj2.x + (obj2.width || 0) / 2);
+            const dy = (obj1.y + (obj1.height || 0) / 2) - (obj2.y + (obj2.height || 0) / 2);
+            const distance = Math.hypot(dx, dy);
+            return distance < obj1.radius + obj2.radius;
+        }
+
+        // AABB (Rectangle vs anything)
+        const r1 = obj1.radius || 0; const r2 = obj2.radius || 0; 
+        const w1 = obj1.width || 0; const h1 = obj1.height || 0; 
+        const w2 = obj2.width || 0; const h2 = obj2.height || 0;
+        
+        const obj1Left = obj1.x - (obj1.radius ? obj1.radius : 0);
+        const obj1Right = obj1.x + (w1 || r1);
+        const obj1Top = obj1.y - (obj1.radius ? obj1.radius : 0);
+        const obj1Bottom = obj1.y + (h1 || r1);
+
+        const obj2Left = obj2.x - (obj2.radius ? obj2.radius : 0);
+        const obj2Right = obj2.x + (w2 || r2);
+        const obj2Top = obj2.y - (obj2.radius ? obj2.radius : 0);
+        const obj2Bottom = obj2.y + (h2 || r2);
+
         return (obj1Left < obj2Right && obj1Right > obj2Left && obj1Top < obj2Bottom && obj1Bottom > obj2Top);
     }
+
     function updateUI() {
         if (!player) return;
         hpBar.style.width = `${(player.hp / player.maxHp) * 100}%`; expBar.style.width = `${(player.exp / player.expToNextLevel) * 100}%`;
@@ -796,7 +827,6 @@ document.addEventListener('DOMContentLoaded', () => {
         finalWaveDisplay.textContent = `${spState.wave}`;
         gameOverModal.style.display = 'flex';
         try {
-            // ATUALIZADO: Envia a horda alcançada para o servidor
             await fetch('/api/ranking', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
@@ -922,7 +952,6 @@ document.addEventListener('DOMContentLoaded', () => {
             rankingTableBody.innerHTML = '';
             if (scores.length === 0) { rankingTableBody.innerHTML = `<tr><td colspan="4">Nenhuma pontuação registrada ainda.</td></tr>`; } 
             else {
-                // ATUALIZADO: Exibe a horda em vez da data
                 scores.forEach((score, index) => {
                     const row = rankingTableBody.insertRow();
                     row.innerHTML = `<td>${index + 1}</td><td>${score.name || 'Anônimo'}</td><td>${score.timeSurvived}</td><td>${score.waveReached}</td>`;
