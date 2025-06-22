@@ -127,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
         type: 'ricochet', color: '#FF69B4', hp: Math.floor((150 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (0.96 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, horizontalSpeed: (0.6 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, projectileDamage: Math.floor((20 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR),
         shootCooldown: 4200, isRicochet: true, width: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD
     };
-    // ATUALIZAÇÃO: Vida do boss aumentada
     const BOSS_CONFIG = {
         type: 'boss', color: '#FFFFFF', hp: Math.floor((300 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR) + 80, speed: (0.96 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, horizontalSpeed: (0.8 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((50 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR),
         projectileDamage: Math.floor((35 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 1440, width: (30 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (30 * SCALE_FACTOR) * ENEMY_SIZE_MOD, isBoss: true
@@ -184,9 +183,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (now - this.lastShootTime > this.owner.shootCooldown * 1.5) {
                 this.lastShootTime = now;
                 const angle = Math.atan2((target.y + target.height / 2) - (this.y + this.height / 2), (target.x + target.width / 2) - (this.x + this.width / 2));
-                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
-                projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage, color: '#FFFFFF' });
+                
+                // ATUALIZADO: Em multiplayer, a criação de projéteis é delegada ao dono do aliado.
+                if (isMultiplayer) {
+                    if (this.owner.id === player.id) { // Só o jogador dono do aliado pode emitir o tiro.
+                         socket.emit('playerShoot', { 
+                            x: this.x + this.width / 2, 
+                            y: this.y + this.height / 2, 
+                            angle: angle, 
+                            speed: this.owner.bulletSpeed, 
+                            damage: this.owner.bulletDamage / 2, 
+                            color: '#FFFFFF'
+                        });
+                    }
+                } else {
+                    const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
+                    projectiles.push(bullet);
+                }
             }
         }
         takeDamage(damage) {
@@ -230,7 +243,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 active: false,
                 hp: 0,
                 maxHp: 2250, 
-                // ATUALIZAÇÃO: Raio do escudo aumentado em 10%
                 baseRadius: this.width * 0.8 * 1.1,
                 auraFlicker: 0
             };
@@ -259,8 +271,11 @@ document.addEventListener('DOMContentLoaded', () => {
             drawTrashCan(this.x, this.y, this.width, this.height, colorToDraw);
             const sX = (this.x + this.width / 2) * scaleX;
             const sY = this.y * scaleY;
-            ctx.fillStyle = 'white'; ctx.font = `${12 * Math.min(scaleX, scaleY)}px VT323`;
-            ctx.textAlign = 'center'; ctx.fillText(this.name, sX, sY - (8 * scaleY));
+            ctx.fillStyle = 'white'; 
+            // ATUALIZAÇÃO: Aumento de 30% no tamanho da fonte (12 -> 16) e ajuste no offset (8 -> 10)
+            ctx.font = `${16 * Math.min(scaleX, scaleY)}px VT323`;
+            ctx.textAlign = 'center'; 
+            ctx.fillText(this.name, sX, sY - (10 * scaleY));
             if (this.ally) this.ally.draw();
         }
 
@@ -284,16 +299,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const now = Date.now();
             if (now - this.lastShootTime > this.shootCooldown) {
                 this.lastShootTime = now;
-                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, this.color, 'player');
-                projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage, color: this.color });
+                
+                // ATUALIZAÇÃO: Lógica dividida para single-player e multiplayer
+                if (isMultiplayer) {
+                    // Em multiplayer, apenas emitimos o evento. O servidor cria o projétil.
+                    socket.emit('playerShoot', { 
+                        x: this.x + this.width / 2, 
+                        y: this.y + this.height / 2, 
+                        angle: angle, 
+                        speed: this.bulletSpeed, 
+                        damage: this.bulletDamage, 
+                        color: this.color 
+                    });
+                } else {
+                    // Em single-player, criamos o projétil localmente.
+                    const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, this.color, 'player');
+                    projectiles.push(bullet);
+                }
             }
         }
         
         takeDamage(damage) {
             if (this.isInvincible) return;
 
-            // Dano é absorvido pelo escudo primeiro
             if(this.shield.active && this.shield.hp > 0) {
                 this.shield.hp -= damage;
                 if(this.shield.hp <= 0) {
@@ -427,13 +455,33 @@ document.addEventListener('DOMContentLoaded', () => {
     function connectMultiplayer() {
         socket = io();
         socket.on('connect', () => socket.emit('joinMultiplayer', { name: player.name, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp }));
-        socket.on('waveStart', (wave) => { spState.wave = wave; }); // Apenas atualiza o número da horda
+        socket.on('waveStart', (wave) => { spState.wave = wave; });
         socket.on('gameState', (state) => {
             if (!isGameRunning) return;
             gameTime = state.gameTime; spState.wave = state.wave; spState.waveState = state.waveState; spState.waveTimer = state.waveTimer * 60;
             const serverEnemyIds = state.enemies.map(e => e.id); enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
             state.enemies.forEach(eData => { let enemy = enemies.find(e => e.id === eData.id); if (enemy) { Object.assign(enemy, eData); } else { enemies.push(new Enemy({ ...eData })); } });
             lightningStrikes = state.lightningStrikes;
+
+            // ATUALIZAÇÃO: Sincroniza os projéteis dos jogadores (servidor é a fonte da verdade)
+            if (state.playerProjectiles) {
+                const serverProjIds = new Set(state.playerProjectiles.map(p => p.id));
+                projectiles = projectiles.filter(p => serverProjIds.has(p.id));
+
+                state.playerProjectiles.forEach(pData => {
+                    let p = projectiles.find(proj => proj.id === pData.id);
+                    if (p) {
+                        p.x = pData.x;
+                        p.y = pData.y;
+                    } else {
+                        const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, pData.ownerId);
+                        newProj.id = pData.id;
+                        newProj.velocity = {x: 0, y: 0}; 
+                        projectiles.push(newProj);
+                    }
+                });
+            }
+
             const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id)); enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
@@ -441,12 +489,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { p.x = pData.x; p.y = pData.y; }
             });
             
-            // ATUALIZAÇÃO: Sincronização completa do estado de todos os jogadores
             const currentOtherPlayerIds = new Set();
             for(const id in state.players) {
                 const pData = state.players[id];
                 if (id === socket.id) {
-                    // Atualiza o estado do próprio jogador com base no servidor (exceto posição, que é controlada pelo cliente)
                     Object.assign(player, pData, { x: player.x, y: player.y });
                     if(pData.hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!pData.hasAlly && player.ally) player.ally = null;
@@ -456,13 +502,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if(!otherPlayers[id]) { 
                     otherPlayers[id] = new Player(pData.x, pData.y, pData.name, pData.color); 
                 }
-                // Aplica o estado completo do servidor ao outro jogador
                 Object.assign(otherPlayers[id], pData);
-                // Gerencia o aliado do outro jogador
                 if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } 
                 else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
             }
-            // Remove jogadores que não estão mais no estado do servidor
              Object.keys(otherPlayers).forEach(id => {
                 if (!currentOtherPlayerIds.has(id)) {
                     delete otherPlayers[id];
@@ -470,7 +513,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         socket.on('playerHit', (damage) => player.takeDamage(damage));
-        socket.on('playerShot', (bulletData) => projectiles.push(new Projectile(bulletData.x, bulletData.y, bulletData.angle, bulletData.speed, bulletData.damage, bulletData.color || NEON_GREEN, 'other_player')));
+        
+        // ATUALIZAÇÃO: O evento 'playerShot' foi removido.
+        
         socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
             const enemy = enemies.find(e => e.id === enemyId);
             if (enemy) { 
@@ -609,23 +654,32 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(otherPlayers).forEach(p => p.draw());
         lightningStrikes.forEach(strike => { for(let i=0; i<3; i++) drawLightning(strike.x, strike.width); });
         
-        projectiles.forEach((p, i) => { p.update(); if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) projectiles.splice(i, 1); });
+        // ATUALIZAÇÃO: Lógica de movimento de projéteis dividida
+        projectiles.forEach((p, i) => {
+            if (!isMultiplayer) {
+                p.update(); // Cliente move em SP
+                if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) {
+                    projectiles.splice(i, 1);
+                }
+            } else {
+                p.draw(); // Cliente só desenha em MP, posição vem do servidor
+            }
+        });
+        
         reflectedProjectiles.forEach((p, i) => { p.update(); if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) { reflectedProjectiles.splice(i, 1); } });
         
-        // ATUALIZAÇÃO: Lógica de ricochete adicionada ao single-player
         enemyProjectiles.forEach((p, i) => {
             if (!isMultiplayer) { 
                 if (p.canRicochet && p.bouncesLeft > 0 && (p.x <= 0 || p.x >= logicalWidth)) {
                     p.velocity.x *= -1;
                     p.bouncesLeft--;
-                    p.x = p.x <= 0 ? 1 : logicalWidth - 1; // Previne ficar preso
+                    p.x = p.x <= 0 ? 1 : logicalWidth - 1;
                 }
                 p.update(); 
             } else { p.draw(); }
             if (p.x < -50 || p.x > logicalWidth+50 || p.y < -50 || p.y > logicalHeight+50) { if (!isMultiplayer) enemyProjectiles.splice(i, 1); }
         });
 
-        // --- LÓGICA DE COLISÃO ---
         if (reactionBlade.active) {
             reactionBlade.y -= 25; reactionBlade.width += 40; reactionBlade.x = player.x + player.width / 2 - reactionBlade.width / 2;
             ctx.save(); ctx.beginPath(); ctx.moveTo(reactionBlade.x * scaleX, (reactionBlade.y + reactionBlade.height) * scaleY);
@@ -665,19 +719,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
             if (player.ally && checkCollision(player.ally, enemy)) player.ally.takeDamage(enemy.damage);
-            for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
-                const proj = projectiles[projIndex];
-                if((proj.owner === 'player' || proj.owner === 'other_player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
-                    if (isMultiplayer) { socket.emit('enemyHit', { enemyId: enemy.id, damage: proj.damage }); } 
-                    else {
+            
+            // ATUALIZAÇÃO: Colisão projétil-inimigo só é checada pelo cliente em single-player
+            if (!isMultiplayer) {
+                for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
+                    const proj = projectiles[projIndex];
+                    if((proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
                             if(proj.owner !== 'corpse_explosion') createCorpseExplosion(enemy);
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); } }, 0);
                         }
+                        projectiles.splice(projIndex, 1);
                     }
-                    projectiles.splice(projIndex, 1);
                 }
             }
         });
@@ -754,7 +809,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 apply: p => { if (p.shield.active) { p.shield.hp = Math.min(p.shield.maxHp, p.shield.hp + 500); } else { p.shield.active = true; p.shield.hp = p.shield.maxHp; } },
                 available: p => currentWave >= 5
             },
-            // ATUALIZAÇÃO: Lógica para Reação Total ser única
             { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (70% da vida máx.). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction && (!isMultiplayer || !Object.values(otherPlayers).some(op => op.hasTotalReaction)) }
         ];
 
@@ -766,7 +820,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function selectUpgrade(upgrade) { upgrade.apply(player); upgradeModal.style.display = 'none'; isPaused = false; }
 
-    // --- Funções de Configurações ---
     function loadSettings() {
         const savedSettings = JSON.parse(localStorage.getItem('neonOutbreakSettings'));
         const defaults = { fps: 60, effectsOn: true, uiOpacity: 100, aimOpacity: 40 };
@@ -785,7 +838,6 @@ document.addEventListener('DOMContentLoaded', () => {
         aimOpacitySlider.value = gameSettings.aimOpacity; aimOpacityValue.textContent = `${gameSettings.aimOpacity}%`;
     }
 
-    // CORREÇÃO: Função `setupTouchControls` agora é definida antes de ser chamada.
     function setupTouchControls() {
         if (!isTouchDevice) return;
         touchLeftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.a.pressed = true; }, { passive: false });
@@ -821,7 +873,6 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.addEventListener('mousedown', () => { if (isGameRunning && !isPaused) mouse.down = true; });
     window.addEventListener('mouseup', () => { mouse.down = false; });
     
-    // CORREÇÃO: Chamada da função movida para depois da sua definição para evitar erros.
     setupTouchControls(); 
     
     startSinglePlayerBtn.addEventListener('click', () => startGame(false));
@@ -846,7 +897,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     closeRankingBtn.addEventListener('click', () => rankingModal.style.display = 'none');
 
-    // Listeners para o Modal de Configurações
     settingsBtn.addEventListener('click', () => { updateSettingsUI(); settingsModal.style.display = 'flex'; });
     saveSettingsBtn.addEventListener('click', () => { saveSettings(); applySettings(); settingsModal.style.display = 'none'; });
     fpsSelector.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { gameSettings.fps = parseInt(e.target.dataset.fps); updateSettingsUI(); } });

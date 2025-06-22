@@ -91,8 +91,8 @@ function getRicochetConfig(wave) { const scale = getScalingFactor(wave); return 
 function findOrCreateRoom() {
     for (const name in rooms) { if (Object.keys(rooms[name].players).length < MAX_PLAYERS_PER_ROOM) return name; }
     const newName = `room_${Date.now()}`;
-    // ATUALIZAÇÃO: Adicionado 'totalReactionHolderId' para controlar quem tem a habilidade
-    rooms[newName] = { players: {}, enemies: [], enemyProjectiles: [], lightningStrikes: [], gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5, classShootingCooldowns: {}, bladeHits: {}, availableColors: [...AVAILABLE_PLAYER_COLORS], totalReactionHolderId: null };
+    // ATUALIZAÇÃO: Adicionado 'playerProjectiles' para gerenciar disparos dos jogadores
+    rooms[newName] = { players: {}, enemies: [], enemyProjectiles: [], playerProjectiles: [], lightningStrikes: [], gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5, classShootingCooldowns: {}, bladeHits: {}, availableColors: [...AVAILABLE_PLAYER_COLORS], totalReactionHolderId: null };
     return newName;
 }
 function spawnEnemy(room, config) { room.enemies.push({ id: `enemy_${Date.now()}_${Math.random()}`, x: Math.random()*(LOGICAL_WIDTH-config.width), y: -50, ...config, maxHp: config.hp, lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0, horizontalSpeed: config.speed / 2 }); }
@@ -142,7 +142,6 @@ setInterval(() => {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
                     room.wave++; room.waveState = 'active'; room.bladeHits = {};
-                    // ATUALIZAÇÃO: Lógica de cooldown da Reação Total
                     playerList.forEach(p => {
                         if (p.hasTotalReaction && p.currentReactionCooldown > 0) {
                             p.currentReactionCooldown--;
@@ -200,7 +199,6 @@ setInterval(() => {
             if (p.y > LOGICAL_HEIGHT+50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH+50) { room.enemyProjectiles.splice(i, 1); continue; }
             const pW = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR; const pH = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
             for (const player of playerList) {
-                // Colisão com escudo
                 if (player.shield && player.shield.active) {
                     const shieldRadius = player.ally ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
                     const dx = p.x - (player.x + player.width / 2);
@@ -212,7 +210,6 @@ setInterval(() => {
                         break; 
                     }
                 }
-                // Colisão com jogador ou aliado
                 if ((p.x > player.x && p.x < player.x + pW && p.y > player.y && p.y < player.y + pH) ||
                     (player.ally && p.x > player.ally.x && p.x < player.ally.x + player.ally.width && p.y > player.ally.y && p.y < player.ally.y + player.ally.height)) {
                     io.to(player.id).emit('playerHit', p.damage); 
@@ -221,7 +218,35 @@ setInterval(() => {
                 }
             }
         }
-        // ATUALIZAÇÃO: O servidor é a fonte da verdade. Envia o estado completo da sala para todos os clientes.
+        
+        // ATUALIZAÇÃO: LÓGICA DOS PROJÉTEIS DOS JOGADORES
+        for (let i = room.playerProjectiles.length - 1; i >= 0; i--) {
+            const p = room.playerProjectiles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.x < 0 || p.x > LOGICAL_WIDTH || p.y < 0 || p.y > LOGICAL_HEIGHT) {
+                room.playerProjectiles.splice(i, 1);
+                continue;
+            }
+
+            for (let j = room.enemies.length - 1; j >= 0; j--) {
+                const enemy = room.enemies[j];
+                if (p.x > enemy.x && p.x < enemy.x + enemy.width && p.y > enemy.y && p.y < enemy.y + enemy.height) {
+                    enemy.hp -= p.damage;
+                    room.playerProjectiles.splice(i, 1);
+
+                    if (enemy.hp <= 0) {
+                        const killerId = p.ownerId;
+                        const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                        room.enemies.splice(j, 1);
+                        io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId, expGain });
+                    }
+                    break;
+                }
+            }
+        }
+
         io.to(roomName).emit('gameState', room);
     }
 }, GAME_TICK_RATE);
@@ -232,7 +257,6 @@ io.on('connection', (socket) => {
         const roomName = findOrCreateRoom();
         socket.join(roomName); socket.room = roomName;
         const room = rooms[roomName]; const color = room.availableColors.length > 0 ? room.availableColors.shift() : AVAILABLE_PLAYER_COLORS[Object.keys(room.players).length % AVAILABLE_PLAYER_COLORS.length];
-        // ATUALIZAÇÃO: A estrutura do jogador no servidor inclui todos os estados relevantes
         room.players[socket.id] = { 
             id: socket.id, 
             ...playerData, 
@@ -251,15 +275,12 @@ io.on('connection', (socket) => {
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
     });
 
-    // ATUALIZAÇÃO: Recebe o estado completo do jogador para garantir a sincronização
     socket.on('playerUpdate', (data) => { 
         if (socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { 
             const player = rooms[socket.room].players[socket.id];
-            // Atualiza apenas as propriedades que o cliente deve controlar
             player.x = data.x;
             player.y = data.y;
             player.hp = data.hp;
-            // O estado do escudo é gerenciado aqui, mas aplicado pelo servidor na colisão
             if (data.shield) {
                 player.shield.active = data.shield.active;
                 player.shield.hp = data.shield.hp;
@@ -267,18 +288,27 @@ io.on('connection', (socket) => {
         } 
     });
 
-    socket.on('playerShoot', (bulletData) => { if(socket.room) socket.to(socket.room).emit('playerShot', bulletData); });
-    socket.on('enemyHit', ({ enemyId, damage }) => {
-        const room = rooms[socket.room]; if (!room) return;
-        const enemy = room.enemies.find(e => e.id === enemyId);
-        if (enemy) {
-            enemy.hp -= damage;
-            if (enemy.hp <= 0) {
-                room.enemies = room.enemies.filter(e => e.id !== enemyId);
-                io.to(socket.room).emit('enemyDied', { enemyId, killerId: socket.id, expGain: enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50)) });
-            }
-        }
+    // ATUALIZAÇÃO: Servidor cria o projétil
+    socket.on('playerShoot', (bulletData) => {
+        const room = rooms[socket.room];
+        if (!room || !room.players[socket.id]) return;
+        
+        const newProjectile = {
+            id: `proj_${Date.now()}_${Math.random()}`,
+            ownerId: socket.id,
+            x: bulletData.x,
+            y: bulletData.y,
+            vx: Math.cos(bulletData.angle) * bulletData.speed,
+            vy: Math.sin(bulletData.angle) * bulletData.speed,
+            damage: bulletData.damage,
+            color: bulletData.color,
+            radius: (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE
+        };
+        
+        room.playerProjectiles.push(newProjectile);
     });
+    
+    // ATUALIZAÇÃO: Evento 'enemyHit' foi removido pois o servidor agora lida com a colisão
 
     socket.on('playerUsedTotalReaction', () => { 
         const room = rooms[socket.room]; 
@@ -286,7 +316,7 @@ io.on('connection', (socket) => {
             const player = room.players[socket.id];
             player.bladeHits[socket.id] = []; 
             player.totalReactionReady = false;
-            player.currentReactionCooldown = player.totalReactionCooldown + 1; // +1 porque a horda atual já começou
+            player.currentReactionCooldown = player.totalReactionCooldown + 1;
         }
     });
 
@@ -304,13 +334,11 @@ io.on('connection', (socket) => {
     });
     socket.on('enemyProjectileDestroyed', (id) => { if(socket.room && rooms[socket.room]) rooms[socket.room].enemyProjectiles = rooms[socket.room].enemyProjectiles.filter(p => p.id !== id); });
     
-    // ATUALIZAÇÃO: Gerencia o estado das habilidades no servidor
     socket.on('playerGotAlly', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasAlly = true; });
     socket.on('playerLostAlly', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasAlly = false; rooms[socket.room].players[socket.id].allyCooldownWave = rooms[socket.room].wave + 2; }});
     socket.on('playerGotLightning', () => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) rooms[socket.room].players[socket.id].hasLightning = true; });
     socket.on('playerGotCorpseExplosion', ({ level }) => { if(socket.room && rooms[socket.room] && rooms[socket.room].players[socket.id]) { rooms[socket.room].players[socket.id].hasCorpseExplosion = true; rooms[socket.room].players[socket.id].corpseExplosionLevel = level; } });
     
-    // ATUALIZAÇÃO: Lógica para garantir que apenas um jogador tenha a Reação Total
     socket.on('playerGotTotalReaction', () => { 
         const room = rooms[socket.room];
         if (room && rooms[socket.room].players[socket.id] && !room.totalReactionHolderId) {
@@ -324,7 +352,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
-            // ATUALIZAÇÃO: Se o jogador com Reação Total sair, a habilidade fica disponível novamente
             if (rooms[roomName].totalReactionHolderId === socket.id) {
                 rooms[roomName].totalReactionHolderId = null;
             }
