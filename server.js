@@ -30,11 +30,13 @@ app.get('/api/ranking', async (req, res) => {
 
 app.post('/api/ranking', async (req, res) => {
     try {
-        const { name, timeSurvived } = req.body;
-        if (!name || typeof timeSurvived !== 'number') {
+        // ATUALIZADO: Recebe waveReached do corpo da requisição
+        const { name, timeSurvived, waveReached } = req.body;
+        if (!name || typeof timeSurvived !== 'number' || typeof waveReached !== 'number') {
             return res.status(400).json({ error: "Dados inválidos." });
         }
-        await db.addScore(name, timeSurvived);
+        // ATUALIZADO: Passa waveReached para a função de adicionar pontuação
+        await db.addScore(name, timeSurvived, waveReached);
         res.status(201).json({ message: "Pontuação adicionada com sucesso!" });
     } catch (err) {
         console.error("Erro ao adicionar pontuação:", err);
@@ -82,6 +84,30 @@ const SNIPER_CONFIG = {
     type: 'sniper', color: '#00FFFF', speed: (0.8 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, horizontalSpeed: (0.5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, isSniper: true, width: (8 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (13 * SCALE_FACTOR) * ENEMY_SIZE_MOD
 };
 const WAVE_INTERVAL_SECONDS = 10;
+
+
+// ATUALIZADO: Adicionada função de colisão no servidor
+function checkCollision(obj1, obj2) {
+    const r1 = obj1.radius || 0;
+    const r2 = obj2.radius || 0;
+    const w1 = obj1.width || 0;
+    const h1 = obj1.height || 0;
+    const w2 = obj2.width || 0;
+    const h2 = obj2.height || 0;
+
+    const obj1Left = obj1.x - r1;
+    const obj1Right = obj1.x + (w1 || r1);
+    const obj1Top = obj1.y - r1;
+    const obj1Bottom = obj1.y + (h1 || r1);
+
+    const obj2Left = obj2.x - r2;
+    const obj2Right = obj2.x + (w2 || r2);
+    const obj2Top = obj2.y - r2;
+    const obj2Bottom = obj2.y + (h2 || r2);
+
+    return (obj1Left < obj2Right && obj1Right > obj2Left && obj1Top < obj2Bottom && obj1Bottom > obj2Top);
+}
+
 
 // --- Funções de escalonamento e spawn ---
 function getScalingFactor(wave) { if (wave <= 1) return 1.0; return 1.0 + Math.min(0.40, (wave - 1) * 0.05); }
@@ -191,16 +217,18 @@ setInterval(() => {
             const now = Date.now(); if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) { if(room.gameTime >= (room.classShootingCooldowns[enemy.type] || 0)) { shootForEnemy(enemy, room, targetPlayer); room.classShootingCooldowns[enemy.type] = room.gameTime + ENEMY_SHOOT_DELAY_TICKS; } }
         });
 
-        // PROJÉTEIS INIMIGOS E COLISÃO
+        // PROJÉTEIS INIMIGOS E COLISÃO (ATUALIZADO E CORRIGIDO)
         for (let i = room.enemyProjectiles.length - 1; i >= 0; i--) {
             const p = room.enemyProjectiles[i];
             if (p.canRicochet && p.bouncesLeft > 0 && (p.x <= 0 || p.x >= LOGICAL_WIDTH)) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH-1; }
             p.x += p.vx; p.y += p.vy;
             if (p.y > LOGICAL_HEIGHT+50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH+50) { room.enemyProjectiles.splice(i, 1); continue; }
-            const pW = (16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR; const pH = (22 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR;
+            
+            // Itera por cada jogador para verificar a colisão com o projétil atual 'p'
             for (const player of playerList) {
+                // Lógica de colisão do escudo
                 if (player.shield && player.shield.active) {
-                    const shieldRadius = player.ally ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
+                    const shieldRadius = player.hasAlly ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
                     const dx = p.x - (player.x + player.width / 2);
                     const dy = p.y - (player.y + player.height / 2);
                     if (Math.hypot(dx, dy) < shieldRadius + p.radius) {
@@ -210,9 +238,27 @@ setInterval(() => {
                         break; 
                     }
                 }
-                if ((p.x > player.x && p.x < player.x + pW && p.y > player.y && p.y < player.y + pH) ||
-                    (player.ally && p.x > player.ally.x && p.x < player.ally.x + player.ally.width && p.y > player.ally.y && p.y < player.ally.y + player.ally.height)) {
-                    io.to(player.id).emit('playerHit', p.damage); 
+                if (room.enemyProjectiles[i] === undefined) break;
+
+                // Verifica colisão com o Aliado (se existir)
+                if (player.hasAlly) {
+                    const allyHitbox = {
+                        width: player.width / 1.5,
+                        height: player.height / 1.5,
+                        x: player.x - (player.width / 1.5) - 10,
+                        y: player.y
+                    };
+                    if (checkCollision(p, allyHitbox)) {
+                        io.to(player.id).emit('allyHit', p.damage);
+                        room.enemyProjectiles.splice(i, 1);
+                        break;
+                    }
+                }
+                if (room.enemyProjectiles[i] === undefined) break;
+
+                // Verifica colisão com o Jogador
+                if (checkCollision(p, player)) {
+                    io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1);
                     break;
                 }

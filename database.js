@@ -24,12 +24,14 @@ async function getTopScores(limit = 10) {
     return await scoresCollection.find().sort({ timeSurvived: -1 }).limit(limit).toArray();
 }
 
-async function addScore(name, timeSurvived) {
+// ATUALIZADO: Adicionado 'waveReached' como parâmetro
+async function addScore(name, timeSurvived, waveReached) {
     const database = await connect();
     const scoresCollection = database.collection('scores');
     const score = {
         name,
         timeSurvived,
+        waveReached, // ATUALIZADO: Campo adicionado ao documento
         date: new Date()
     };
     return await scoresCollection.insertOne(score);

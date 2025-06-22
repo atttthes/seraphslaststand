@@ -272,10 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const sX = (this.x + this.width / 2) * scaleX;
             const sY = this.y * scaleY;
             ctx.fillStyle = 'white'; 
-            // ATUALIZAÇÃO: Aumento de 30% no tamanho da fonte (12 -> 16) e ajuste no offset (8 -> 10)
-            ctx.font = `${16 * Math.min(scaleX, scaleY)}px VT323`;
+            // ATUALIZADO: Tamanho da fonte aumentado em 700% (16 * 7 = 112) e offset ajustado
+            ctx.font = `${112 * Math.min(scaleX, scaleY)}px VT323`;
             ctx.textAlign = 'center'; 
-            ctx.fillText(this.name, sX, sY - (10 * scaleY));
+            ctx.fillText(this.name, sX, sY - (25 * scaleY));
             if (this.ally) this.ally.draw();
         }
 
@@ -454,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function connectMultiplayer() {
         socket = io();
-        socket.on('connect', () => socket.emit('joinMultiplayer', { name: player.name, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp }));
+        socket.on('connect', () => socket.emit('joinMultiplayer', { name: player.name, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp, width: player.width, height: player.height }));
         socket.on('waveStart', (wave) => { spState.wave = wave; });
         socket.on('gameState', (state) => {
             if (!isGameRunning) return;
@@ -514,7 +514,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         socket.on('playerHit', (damage) => player.takeDamage(damage));
         
-        // ATUALIZAÇÃO: O evento 'playerShot' foi removido.
+        // ATUALIZADO: Adicionado listener para dano no aliado
+        socket.on('allyHit', (damage) => {
+            if (player && player.ally) {
+                player.ally.takeDamage(damage);
+            }
+        });
         
         socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
             const enemy = enemies.find(e => e.id === enemyId);
@@ -777,7 +782,18 @@ document.addEventListener('DOMContentLoaded', () => {
         finalTimeDisplay.textContent = finalTimeInSeconds;
         finalWaveDisplay.textContent = `${spState.wave}`;
         gameOverModal.style.display = 'flex';
-        try { await fetch('/api/ranking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: playerName, timeSurvived: finalTimeInSeconds }) }); } 
+        try {
+            // ATUALIZADO: Envia a horda alcançada para o servidor
+            await fetch('/api/ranking', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    name: playerName, 
+                    timeSurvived: finalTimeInSeconds,
+                    waveReached: spState.wave 
+                }) 
+            });
+        } 
         catch (error) { console.error("Falha ao salvar pontuação:", error); }
     }
 
@@ -892,7 +908,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const scores = await response.json();
             rankingTableBody.innerHTML = '';
             if (scores.length === 0) { rankingTableBody.innerHTML = `<tr><td colspan="4">Nenhuma pontuação registrada ainda.</td></tr>`; } 
-            else { scores.forEach((score, index) => { const row = rankingTableBody.insertRow(); const date = new Date(score.date).toLocaleDateString('pt-BR'); row.innerHTML = `<td>${index + 1}</td><td>${score.name || 'Anônimo'}</td><td>${score.timeSurvived}</td><td>${date}</td>`; }); }
+            else {
+                // ATUALIZADO: Exibe a horda em vez da data
+                scores.forEach((score, index) => {
+                    const row = rankingTableBody.insertRow();
+                    row.innerHTML = `<td>${index + 1}</td><td>${score.name || 'Anônimo'}</td><td>${score.timeSurvived}</td><td>${score.waveReached}</td>`;
+                });
+            }
         } catch (error) { console.error('Erro ao buscar ranking:', error); rankingTableBody.innerHTML = `<tr><td colspan="4">Não foi possível carregar o ranking.</td></tr>`; }
     });
     closeRankingBtn.addEventListener('click', () => rankingModal.style.display = 'none');
