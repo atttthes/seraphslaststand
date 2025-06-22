@@ -6,7 +6,8 @@
     --dark-bg: #000000;
     --dark-secondary: #0a0a0a;
     --main-font: 'VT323', monospace;
-    --neon-yellow: #FFD700; /* ATUALIZADO: Amarelo incandescente para o escudo */
+    --neon-yellow: #FFD700; /* Amarelo incandescente para o escudo */
+    --ui-opacity: 1; /* ATUALIZADO: Opacidade da UI */
 }
 
 body, html {
@@ -49,7 +50,7 @@ body, html {
 }
 
 #mainMenu h1 {
-    font-size: clamp(3em, 10vmin, 6em); /* ATUALIZADO: vmin para escala uniforme */
+    font-size: clamp(3em, 10vmin, 6em);
     text-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green), 0 0 30px #00ff7f;
     letter-spacing: 3px;
     text-align: center;
@@ -57,7 +58,7 @@ body, html {
 
 #mainMenu input, #mainMenu button {
     padding: 12px 25px;
-    font-size: clamp(1.2em, 3vmin, 2em); /* ATUALIZADO: vmin para escala uniforme */
+    font-size: clamp(1.2em, 3vmin, 2em);
     border: 2px solid var(--neon-green);
     background-color: transparent;
     color: var(--neon-green);
@@ -96,8 +97,6 @@ body, html {
     position: relative;
     border: 2px solid var(--neon-green);
     box-shadow: 0 0 10px var(--neon-green) inset;
-    
-    /* Proporção 16:9, centralizado e responsivo */
     aspect-ratio: 16 / 9;
     width: 100%;
     height: auto;
@@ -125,6 +124,8 @@ body, html {
     gap: 10px;
     z-index: 10;
     pointer-events: none;
+    opacity: var(--ui-opacity); /* ATUALIZADO: Usa a variável de opacidade */
+    transition: opacity 0.3s;
 }
 #topBar > * { pointer-events: all; }
 
@@ -132,12 +133,10 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    font-size: clamp(0.9em, 2vmin, 1.4em); /* ATUALIZADO: vmin para escala uniforme */
+    font-size: clamp(0.9em, 2vmin, 1.4em);
 }
 
-#timer {
-    display: none;
-}
+#timer { display: none; }
 
 #gameControls {
     display: flex;
@@ -145,13 +144,11 @@ body, html {
     gap: 15px;
     text-align: right;
 }
-#waveInfo {
-    display: none;
-}
+#waveInfo { display: none; }
 #gameControls button {
     font-family: var(--main-font);
-    font-size: clamp(0.8em, 1.5vmin, 1.2em); /* ATUALIZADO: vmin para escala uniforme */
-    padding: 5px 10px; /* ATUALIZADO */
+    font-size: clamp(0.8em, 1.5vmin, 1.2em);
+    padding: 5px 10px;
     border: 2px solid var(--dark-bg);
     background-color: var(--neon-green);
     color: var(--dark-bg);
@@ -183,7 +180,7 @@ body, html {
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
 
-/* ATUALIZADO: Estilos do escudo para amarelo */
+/* Estilos do escudo para amarelo */
 #shieldBarContainer { border-color: var(--neon-yellow); background-color: rgba(255, 215, 0, 0.05); }
 #shieldBarContainer > span { color: var(--neon-yellow); }
 #shieldBar { background-color: var(--neon-yellow); width: 100%; }
@@ -191,7 +188,7 @@ body, html {
 /* --- Controles Touch --- */
 #touchControls {
     display: none; /* Escondido por padrão, ativado via JS se houver toque */
-    position: relative; /* Posicionado pelo app-wrapper */
+    position: relative;
     width: 100%;
     max-width: 95vw;
     justify-content: space-between;
@@ -199,12 +196,11 @@ body, html {
     box-sizing: border-box;
     z-index: 50;
     pointer-events: none;
+    opacity: var(--ui-opacity); /* ATUALIZADO: Usa a variável de opacidade */
+    transition: opacity 0.3s;
 }
 
-/* Mostra os controles em dispositivos com suporte a toque (classe adicionada por JS) */
-body.touch-enabled #touchControls {
-    display: flex;
-}
+body.touch-enabled #touchControls { display: flex; }
     
 #left-controls, #right-controls {
     display: flex;
@@ -253,7 +249,7 @@ body.touch-enabled #touchControls {
     position: absolute; top: 27.5px; left: 27.5px; transition: transform 0.1s;
 }
 
-/* Modais (sem grandes alterações) */
+/* Modais */
 .modal {
     position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
     background-color: rgba(0,0,0,0.8);
@@ -264,9 +260,10 @@ body.touch-enabled #touchControls {
     background-color: var(--dark-secondary);
     padding: 30px; border: 2px solid var(--neon-green);
     box-shadow: 0 0 15px var(--neon-green);
-    text-align: center; min-width: 300px;
+    text-align: center;
     max-width: 90%; max-height: 90vh; overflow-y: auto;
     font-size: 1.5em; display: flex; flex-direction: column; gap: 15px;
+    width: 500px; /* Largura para melhor layout */
 }
 .modal-content h2 { margin-top: 0; font-size: 2em; text-shadow: 0 0 8px var(--neon-green); }
 .modal-content button {
@@ -288,3 +285,67 @@ body.touch-enabled #touchControls {
 #rankingTable th, #rankingTable td { padding: 8px 12px; border: 1px solid var(--neon-green); }
 #rankingTable th { background-color: rgba(0, 255, 127, 0.2); }
 #rankingTable tr:nth-child(even) { background-color: rgba(0, 255, 127, 0.1); }
+
+/* --- ATUALIZADO: Estilos do Modal de Configurações --- */
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 20px;
+    font-size: 1em;
+}
+.setting-row label {
+    text-align: left;
+}
+.setting-row .control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#fpsSelector button {
+    padding: 8px 15px;
+    font-size: 1em;
+    margin: 0;
+}
+#fpsSelector button.active {
+    background-color: var(--neon-green);
+    color: var(--dark-bg);
+    box-shadow: 0 0 15px var(--neon-green);
+}
+
+.switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; border: 1px solid var(--neon-green); }
+.slider:before { position: absolute; content: ""; height: 24px; width: 24px; left: 4px; bottom: 4px; background-color: var(--neon-green); transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--dark-secondary); }
+input:checked + .slider:before { transform: translateX(26px); }
+
+input[type="range"] {
+    -webkit-appearance: none;
+    width: 150px;
+    height: 10px;
+    background: rgba(0, 255, 127, 0.2);
+    outline: none;
+    border: 1px solid var(--neon-green);
+    border-radius: 5px;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--neon-green);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--neon-green);
+}
+
+.settings-footer {
+    margin-top: 25px;
+    font-size: 0.8em;
+    opacity: 0.7;
+    border-top: 1px solid rgba(0, 255, 127, 0.3);
+    padding-top: 15px;
+}

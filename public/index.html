@@ -17,6 +17,7 @@
         <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
         <button id="startSinglePlayerBtn">Modo Um Jogador</button>
         <button id="startMultiplayerBtn">Modo Cooperativo (até 4P)</button>
+        <button id="settingsBtn">⚙️ Configurações</button>
         <button id="showRankingBtn">🏆 Ver Ranking</button>
     </div>
 
@@ -25,7 +26,7 @@
         <div id="gameContainer">
             <canvas id="gameCanvas"></canvas>
 
-            <!-- UI do Jogo (Mantém a estrutura) -->
+            <!-- UI do Jogo -->
             <div id="topBar">
                 <div id="ui">
                     <div id="hpBarContainer">
@@ -52,22 +53,18 @@
             </div>
         </div>
 
-        <!-- Controles Touch (Agora fora do gameContainer) -->
+        <!-- Controles Touch -->
         <div id="touchControls">
-            <!-- Controles de Movimento e Ações à Esquerda -->
             <div id="left-controls">
                 <div id="moveControlsContainer">
                     <button id="touchLeft" class="touch-move-btn">◀</button>
                     <button id="touchRight" class="touch-move-btn">▶</button>
                 </div>
-                <!-- Botões de Habilidade/Pulo agrupados aqui -->
                 <div id="abilityControls">
                     <button id="touchJumpBtn" class="ability-btn" title="Pular">↑</button>
                     <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
                 </div>
             </div>
-
-            <!-- Joystick de Mira à Direita -->
             <div id="right-controls">
                 <div id="aimJoystick" class="joystick-container">
                     <div id="aimJoystickKnob" class="joystick-knob"></div>
@@ -113,6 +110,51 @@
                 <tbody></tbody>
             </table>
             <button id="closeRankingBtn">Fechar</button>
+        </div>
+    </div>
+
+    <!-- ATUALIZADO: Modal de Configurações -->
+    <div id="settingsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>⚙️ Configurações</h2>
+            
+            <div class="setting-row">
+                <label>FPS do Jogo</label>
+                <div class="control-group" id="fpsSelector">
+                    <button data-fps="30">30 FPS</button>
+                    <button data-fps="60" class="active">60 FPS</button>
+                </div>
+            </div>
+            
+            <div class="setting-row">
+                <label>Efeitos Especiais (Rastros)</label>
+                 <div class="control-group">
+                    <label class="switch">
+                        <input type="checkbox" id="effectsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <label for="uiOpacitySlider">Opacidade da UI</label>
+                <div class="control-group">
+                    <input type="range" id="uiOpacitySlider" min="10" max="100" value="100">
+                    <span id="uiOpacityValue">100%</span>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <label for="aimOpacitySlider">Opacidade da Mira</label>
+                 <div class="control-group">
+                    <input type="range" id="aimOpacitySlider" min="10" max="100" value="40">
+                    <span id="aimOpacityValue">40%</span>
+                </div>
+            </div>
+            
+            <button id="saveSettingsBtn">Salvar e Fechar</button>
+
+            <p class="settings-footer">Produzido Totalmente no celular por Athes.</p>
         </div>
     </div>
 
