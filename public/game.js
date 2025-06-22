@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
     let gameTime = 0, animationFrameId, socket, playerName = "Jogador";
     let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
-    let logicalWidth = 1600, logicalHeight = 900; // ATUALIZADO para paisagem
+    let logicalWidth = 1600, logicalHeight = 900;
     let backgroundOrbs = [];
     let reactionBlade = { active: false, x: 0, y: 0, width: 0, height: 15, hitEnemies: [] };
     let reflectedProjectiles = [];
@@ -64,8 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gravity = 0.6;
     const NEON_GREEN = '#00ff7f';
     
-    // --- Geometria do Chão (NOVO) ---
-    // Pontos definidos como [x_ratio, y_ratio] do canvas
+    // --- Geometria do Chão ---
     const floorPath = [
         [0.00, 0.70], [0.05, 0.70], [0.05, 0.74], [0.10, 0.74], [0.10, 0.78],
         [0.15, 0.78], [0.15, 0.82], [0.20, 0.82], [0.20, 0.86], [0.25, 0.86],
@@ -73,35 +72,35 @@ document.addEventListener('DOMContentLoaded', () => {
         [0.75, 0.86], [0.80, 0.86], [0.80, 0.82], [0.85, 0.82], [0.85, 0.78],
         [0.90, 0.78], [0.90, 0.74], [0.95, 0.74], [0.95, 0.70], [1.00, 0.70]
     ];
-    let floorPoints = []; // Será populado com coordenadas em pixels
+    let floorPoints = [];
 
-    // --- Posições no Canvas (Ratios aplicados a nova altura) ---
-    const DEFENSE_LINE_Y_RATIO = 0.5;
-    const BOSS_LINE_Y_RATIO = 0.3;
-    const RICOCHET_LINE_Y_RATIO = 0.2;
-    const SNIPER_LINE_Y_RATIO = 0.1;
+    // --- Posições no Canvas (ATUALIZADO: Linhas 25% mais altas) ---
+    const DEFENSE_LINE_Y_RATIO = 0.5 * 0.75;    // 0.375
+    const BOSS_LINE_Y_RATIO = 0.3 * 0.75;       // 0.225
+    const RICOCHET_LINE_Y_RATIO = 0.2 * 0.75;   // 0.15
+    const SNIPER_LINE_Y_RATIO = 0.1 * 0.75;     // 0.075
 
-    // --- CONFIGS DE HORDAS (Tamanhos atualizados) ---
+    // --- CONFIGS DE HORDAS (ATUALIZADO: HP reduzido em 40%) ---
     const WAVE_CONFIG = [
-        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-        { type: 'basic', color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-        { type: 'basic', color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-        { type: 'basic', color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-        { type: 'basic', color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
     ];
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 8, height: 13, isSniper: true, // ATUALIZADO (redução 75%)
+        width: 8, height: 13, isSniper: true,
         speed: 1.0, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
-        type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 10, height: 10 // ATUALIZADO (redução 75%)
+        type: 'ricochet', color: '#FF69B4', hp: 150, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
+        shootCooldown: 4200, isRicochet: true, width: 10, height: 10
     };
     const BOSS_CONFIG = {
-        type: 'boss', color: '#FFFFFF', hp: 500, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true // ATUALIZADO (redução 75%)
+        type: 'boss', color: '#FFFFFF', hp: 300, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
@@ -141,13 +140,13 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- FUNÇÃO DE DESENHO DO PERSONAGEM (sem alterações) ---
+    // --- FUNÇÃO DE DESENHO DO PERSONAGEM ---
     function drawTrashCan(x, y, width, height, color, aCtx = ctx) {
         aCtx.save();
         aCtx.strokeStyle = color;
         aCtx.shadowColor = color;
         aCtx.shadowBlur = 15;
-        aCtx.lineWidth = Math.max(1, width / 15); // Linha se ajusta ao tamanho
+        aCtx.lineWidth = Math.max(1, width / 15);
 
         const bodyHeight = height * 0.85;
         const lidHeight = height * 0.15;
@@ -230,12 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 10; this.height = 14; // ATUALIZADO (redução 75%)
+            this.width = 10; this.height = 14;
             this.velocityY = 0;
-            this.speed = 2.1; // ATUALIZADO (redução 70%)
-            this.jumpForce = 15; this.onGround = false;
+            this.speed = 2.1;
+            this.jumpForce = 4; // ATUALIZADO: Pulo reduzido em 75%
+            this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
-            this.shootCooldown = 300; // ATUALIZADO (cadência 40% menor)
+            this.shootCooldown = 300;
             this.bulletDamage = 70;
             
             this.isInvincible = false; this.invincibleTime = 500;
@@ -247,6 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
             this.hasLightning = false; this.nextLightningTime = 0;
             this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3;
             this.currentReactionCooldown = 0;
+
+            // NOVO: Item Corpo Explosivo
+            this.hasCorpseExplosion = false;
+            this.corpseExplosionLevel = 0;
             
             this.shield = {
                 active: false, hp: 0, maxHp: 2500, radius: 80,
@@ -276,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const color = this.isInvincible ? 'rgba(0, 255, 127, 0.5)' : NEON_GREEN;
             drawTrashCan(this.x, this.y, this.width, this.height, color);
 
-            ctx.fillStyle = 'white'; ctx.font = '12px VT323'; // Reduzido para caber
+            ctx.fillStyle = 'white'; ctx.font = '12px VT323';
             ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 8);
             if (this.ally) this.ally.draw();
         }
@@ -296,7 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (this.x < 0) this.x = 0;
             if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
 
-            // NOVO: Usa a função getGroundY para colisão com o chão
             const groundY = getGroundY(this.x + this.width / 2) - this.height;
             if (this.y + this.velocityY >= groundY) {
                 this.velocityY = 0; this.onGround = true; this.y = groundY;
@@ -347,8 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
             Object.assign(this, config);
             this.maxHp = config.hp;
             this.patrolOriginX = null;
-            this.patrolRange = 0;
             this.reachedPosition = false;
+            this.baseY = 0; // Para movimento de "bobbing"
         }
 
         draw() {
@@ -377,15 +380,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!this.reachedPosition) {
                     if (this.y < targetY) { this.y += this.speed; } 
-                    else { this.y = targetY; this.reachedPosition = true; this.patrolOriginX = this.x; this.patrolRange = canvas.width * (this.isBoss ? 0.3 : 0.1); }
+                    else { 
+                        this.y = targetY; 
+                        this.baseY = targetY; // Define a posição Y base para o "bobbing"
+                        this.reachedPosition = true; 
+                        this.patrolOriginX = this.x;
+                    }
                 } else {
+                    // Movimento vertical sutil (bobbing)
+                    if (this.baseY) {
+                        const phase = (this.id.charCodeAt(this.id.length - 1) || 0) % (Math.PI * 2);
+                        this.y = this.baseY + Math.sin(gameTime * 0.05 + phase) * 5;
+                    }
+                    
                     const patrolSpeed = this.horizontalSpeed || this.speed / 2;
-                    if (!this.isRicochet) {
+                    if (!this.isRicochet) { // Ricochet inimigos patrulham diferente
                         const moveDirection = Math.sign(player.x - this.x);
                         this.x += moveDirection * patrolSpeed;
                     }
-                    const leftBoundary = this.patrolOriginX - (this.patrolRange / 2);
-                    const rightBoundary = this.patrolOriginX + (this.patrolRange / 2);
+
+                    const patrolRange = canvas.width * (this.isBoss ? 0.3 : 0.1);
+                    const leftBoundary = this.patrolOriginX - (patrolRange / 2);
+                    const rightBoundary = this.patrolOriginX + (patrolRange / 2);
                     if (this.x < leftBoundary) this.x = leftBoundary;
                     if (this.x > rightBoundary - this.width) this.x = rightBoundary - this.width;
                 }
@@ -400,24 +416,46 @@ document.addEventListener('DOMContentLoaded', () => {
     class Projectile {
         constructor(x, y, angle, speed, damage, color, owner = 'player', originId = null) {
             this.id = `proj_${Date.now()}_${Math.random()}`;
-            this.x = x; this.y = y; this.radius = 5;
+            this.x = x; this.y = y;
             this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
             this.damage = damage; this.owner = owner; this.color = color;
             this.originId = originId;
-            this.trail = []; this.trailLength = 15;
-            if (owner !== 'player') this.radius = 8;
+            this.trail = [];
+            this.trailLength = 10; // Rastro mais curto parece melhor
+
+            // ATUALIZADO: Tamanho dos projéteis reduzido em 70%
+            if (owner === 'player' || owner === 'corpse_explosion' || owner === 'reflected' || owner === 'other_player') {
+                this.radius = 2;
+            } else { // 'enemy'
+                this.radius = 3;
+            }
         }
 
+        // ATUALIZADO: Rastro de neon estilo "Seraph's Last Stand"
         drawTrail(aCtx = ctx) {
-            for (let i = 0; i < this.trail.length; i++) {
-                const pos = this.trail[i];
-                aCtx.globalAlpha = (i / this.trail.length) * 0.5;
+            if (this.trail.length < 2) return;
+
+            aCtx.save();
+            aCtx.lineCap = 'round';
+            aCtx.lineJoin = 'round';
+            aCtx.strokeStyle = this.color;
+            aCtx.shadowColor = this.color;
+            aCtx.shadowBlur = 10;
+
+            for (let i = 1; i < this.trail.length; i++) {
+                const startPoint = this.trail[i-1];
+                const endPoint = this.trail[i];
+                
+                // A opacidade e a espessura diminuem ao longo do rastro
+                aCtx.globalAlpha = (i / this.trail.length) * 0.8;
+                aCtx.lineWidth = this.radius * 1.5 * (i / this.trail.length);
+
                 aCtx.beginPath();
-                aCtx.arc(pos.x, pos.y, this.radius * (i / this.trail.length), 0, Math.PI * 2);
-                aCtx.fillStyle = this.color;
-                aCtx.fill();
+                aCtx.moveTo(startPoint.x, startPoint.y);
+                aCtx.lineTo(endPoint.x, endPoint.y);
+                aCtx.stroke();
             }
-            aCtx.globalAlpha = 1.0;
+            aCtx.restore(); // Restaura alpha, lineWidth, etc.
         }
 
         draw(aCtx = ctx) {
@@ -425,7 +463,10 @@ document.addEventListener('DOMContentLoaded', () => {
             aCtx.beginPath();
             aCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             aCtx.fillStyle = this.color;
+            aCtx.shadowColor = this.color;
+            aCtx.shadowBlur = 5;
             aCtx.fill();
+            aCtx.shadowBlur = 0;
         }
 
         update(aCtx = ctx) { 
@@ -450,7 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function returnToMenu() {
         cleanup();
         gameOverModal.style.display = 'none';
-        appWrapper.style.display = 'none'; // Esconde o wrapper do jogo
+        appWrapper.style.display = 'none';
         mainMenu.style.display = 'flex';
         totalReactionBtn.style.display = 'none';
         isGameRunning = false;
@@ -458,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         cleanup(); isGameOver = false; gameTime = 0;
-        resizeCanvas(); // Recalcula o chão aqui
+        resizeCanvas();
         player = new Player(canvas.width / 2, canvas.height - 200, playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
         reflectedProjectiles = [];
@@ -483,17 +524,37 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.width = gameRect.width;
         canvas.height = gameRect.height;
         
-        // NOVO: Recalcula os pontos do chão em pixels sempre que a tela é redimensionada
         floorPoints = floorPath.map(p => ({ x: p[0] * canvas.width, y: p[1] * canvas.height }));
     }
 
     function startGame(multiplayer) {
-        // CORREÇÃO APLICADA: Pega o nome do jogador do input no momento de iniciar
         playerName = playerNameInput.value || "Anônimo";
         isMultiplayer = multiplayer;
         mainMenu.style.display = 'none';
-        appWrapper.style.display = 'flex'; // Mostra o wrapper do jogo
+        appWrapper.style.display = 'flex';
         init(); isGameRunning = true; animate();
+    }
+    
+    // NOVO: Função para criar a explosão de projéteis
+    function createCorpseExplosion(enemy) {
+        if (!player || !player.hasCorpseExplosion) return;
+
+        const numProjectiles = 8;
+        const damage = 150 * (1 + (player.corpseExplosionLevel - 1) * 0.15);
+
+        for (let i = 0; i < numProjectiles; i++) {
+            const angle = (i / numProjectiles) * Math.PI * 2;
+            const bullet = new Projectile(
+                enemy.x + enemy.width / 2, 
+                enemy.y + enemy.height / 2, 
+                angle, 
+                6, // Velocidade dos projéteis da explosão
+                damage, 
+                '#FFA500', // Cor laranja para distinguir
+                'corpse_explosion' 
+            );
+            projectiles.push(bullet);
+        }
     }
 
     function connectMultiplayer() {
@@ -529,7 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
             enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
             state.enemies.forEach(eData => {
                 let enemy = enemies.find(e => e.id === eData.id);
-                const enemyConfig = { ...eData, x: eData.x * scaleX, y: eData.y * scaleY, width: eData.width * scaleX, height: eData.height * scaleY};
+                const enemyConfig = { ...eData, x: eData.x * scaleX, y: eData.y * scaleY, width: eData.width, height: eData.height};
                 if (enemy) { Object.assign(enemy, enemyConfig); } 
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
@@ -558,6 +619,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(pData.hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!pData.hasAlly && player.ally) player.ally = null;
                     if(pData.hasLightning) player.hasLightning = true;
+                    if(pData.hasCorpseExplosion && p.corpseExplosionLevel < pData.corpseExplosionLevel){
+                        player.hasCorpseExplosion = true;
+                        player.corpseExplosionLevel = pData.corpseExplosionLevel;
+                    }
                     if(pData.hasTotalReaction) {
                         player.hasTotalReaction = true;
                         if(pData.totalReactionCooldownWave > spState.wave) {
@@ -579,6 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } 
                 else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
                 if (pData.hasLightning) otherPlayers[id].hasLightning = true;
+                if (pData.hasCorpseExplosion) otherPlayers[id].hasCorpseExplosion = true;
             }
         });
 
@@ -589,6 +655,13 @@ document.addEventListener('DOMContentLoaded', () => {
             projectiles.push(new Projectile(bulletData.x * scaleX, bulletData.y * scaleY, bulletData.angle, bulletData.speed, bulletData.damage, NEON_GREEN, 'other_player'))
         });
         socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
+            const enemy = enemies.find(e => e.id === enemyId);
+            if (enemy && isMultiplayer) { // Em MP, a explosão é local para quem tem o poder
+                const killerPlayer = killerId === socket.id ? player : otherPlayers[killerId];
+                if (killerPlayer && killerPlayer.hasCorpseExplosion) {
+                    createCorpseExplosion(enemy);
+                }
+            }
             enemies = enemies.filter(e => e.id !== enemyId);
             if(killerId === socket.id) player.addExp(expGain);
         });
@@ -602,7 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isAiming) player.shoot(aimAngle);
     }
     
-    // NOVO: Desenha o chão com base na imagem
     function drawNewFloor() {
         if (floorPoints.length === 0) return;
 
@@ -612,7 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.shadowColor = NEON_GREEN;
         ctx.shadowBlur = 10;
         
-        // Desenha a linha superior do chão
         ctx.beginPath();
         ctx.moveTo(floorPoints[0].x, floorPoints[0].y);
         for (let i = 1; i < floorPoints.length; i++) {
@@ -620,7 +691,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ctx.stroke();
 
-        // Desenha os "pingos" decorativos
         ctx.lineWidth = 2;
         ctx.shadowBlur = 5;
         const flatPart = floorPoints.slice(10, 12);
@@ -638,25 +708,20 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.restore();
     }
 
-    // NOVO: Calcula a altura Y do chão para uma dada posição X
     function getGroundY(x) {
-        if (floorPoints.length < 2) return canvas.height; // Fallback
+        if (floorPoints.length < 2) return canvas.height;
 
         for (let i = 0; i < floorPoints.length - 1; i++) {
             const p1 = floorPoints[i];
             const p2 = floorPoints[i+1];
             if (x >= p1.x && x <= p2.x) {
-                // Se o segmento é vertical, retorna o Y do ponto mais alto.
                 if (p1.x === p2.x) {
                     return Math.min(p1.y, p2.y);
                 }
-                // Interpolação linear para segmentos inclinados (nenhum no design atual, mas bom ter)
-                // e retorna o Y para segmentos horizontais.
                 const slope = (p2.y - p1.y) / (p2.x - p1.x);
                 return p1.y + slope * (x - p1.x);
             }
         }
-        // Se estiver fora dos limites (esquerda/direita), retorna o Y do primeiro/último ponto.
         return x < floorPoints[0].x ? floorPoints[0].y : floorPoints[floorPoints.length - 1].y;
     }
 
@@ -720,7 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function drawGameBackground() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawNewFloor(); // ATUALIZADO
+        drawNewFloor();
     }
 
     function updateSPLightning() {
@@ -744,6 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             enemies = enemies.filter(e => {
                 if (e.hp <= 0) {
+                    createCorpseExplosion(e); // Adiciona explosão aqui também
                     const expGain = e.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50));
                     player.addExp(expGain);
                     return false;
@@ -795,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const waveConfig = getSPWaveConfig(spState.wave);
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
-                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 10), y: -50, width: 10, height: 10, horizontalSpeed: waveConfig.speed / 2 }; // ATUALIZADO
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 10), y: -50, width: 10, height: 10, horizontalSpeed: waveConfig.speed / 2 };
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
@@ -863,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath();
             ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
             ctx.lineTo(player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000, player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000);
-            ctx.strokeStyle = 'rgba(0, 255, 127, 0.1)';
+            ctx.strokeStyle = 'rgba(0, 255, 127, 0.6)'; // ATUALIZADO: Opacidade da mira
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.restore();
@@ -957,6 +1023,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         enemy.hp -= 150;
                         if (enemy.hp <= 0) {
+                            createCorpseExplosion(enemy); // Adiciona explosão aqui também
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
@@ -978,6 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     target.hp -= rp.damage;
                     if (target.hp <= 0) {
+                        createCorpseExplosion(target); // Adiciona explosão aqui
                         const expGain = target.isBoss ? 1000 : (target.isSniper ? 75 : (target.isRicochet ? 60 : 50));
                         setTimeout(() => {
                            const currentIndex = enemies.findIndex(e => e.id === target.id);
@@ -992,14 +1060,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
-            if (p.owner !== 'player') continue;
-            for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
-                const ep = enemyProjectiles[j];
-                if (checkCollision(p, ep)) {
-                    if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', ep.id);
-                    projectiles.splice(i, 1);
-                    if (!isMultiplayer) enemyProjectiles.splice(j, 1);
-                    break; 
+            if (p.owner === 'player' || p.owner === 'other_player') {
+                 for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
+                    const ep = enemyProjectiles[j];
+                    if (checkCollision(p, ep)) {
+                        if (isMultiplayer && socket) socket.emit('enemyProjectileDestroyed', ep.id);
+                        projectiles.splice(i, 1);
+                        if (!isMultiplayer) enemyProjectiles.splice(j, 1);
+                        break; 
+                    }
                 }
             }
         }
@@ -1029,16 +1098,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
                 const proj = projectiles[projIndex];
-                if(proj.owner === 'player' && checkCollision(proj, enemy)) {
+                if((proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
                     if (isMultiplayer) {
+                        // A lógica de dano para MP é tratada no servidor para evitar trapaças
+                        // Apenas a explosão visual é local.
                         socket.emit('enemyHit', { enemyId: enemy.id, damage: proj.damage });
-                    } else {
+                    } else { // Lógica para Single Player
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
+                            // Previne que uma explosão gere outra explosão
+                            if(proj.owner !== 'corpse_explosion') {
+                                createCorpseExplosion(enemy);
+                            }
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
-                                if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); }
+                                if (currentIndex !== -1) { 
+                                    enemies.splice(currentIndex, 1); 
+                                    player.addExp(expGain); 
+                                }
                             }, 0);
                         }
                     }
@@ -1079,7 +1157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (player.hasTotalReaction) {
-            totalReactionBtn.style.display = 'flex'; // 'flex' para alinhar ícone
+            totalReactionBtn.style.display = 'flex';
             totalReactionBtn.disabled = !player.totalReactionReady;
             if(!player.totalReactionReady) {
                 totalReactionBtn.textContent = `${player.currentReactionCooldown}`;
@@ -1092,7 +1170,6 @@ document.addEventListener('DOMContentLoaded', () => {
             totalReactionBtn.style.display = 'none';
         }
         
-        // CORREÇÃO APLICADA: Lógica para mostrar a barra de escudo
         const shieldBarContainer = document.getElementById('shieldBarContainer');
         if (player.shield.active && player.shield.maxHp > 0) {
             shieldBarContainer.style.display = 'block';
@@ -1106,7 +1183,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function endGame() {
         if (isGameOver) return;
         isGameOver = true; isGameRunning = false;
-        // CORREÇÃO APLICADA: Cálculo e envio do tempo em segundos
         const finalTimeInSeconds = Math.floor(gameTime / 60);
         finalTimeDisplay.textContent = finalTimeInSeconds;
         finalWaveDisplay.textContent = `${spState.wave}`;
@@ -1126,6 +1202,10 @@ document.addEventListener('DOMContentLoaded', () => {
         rerollUpgradesBtn.disabled = player.rerolls <= 0;
 
         const currentWave = spState.wave;
+        
+        // NOVO: Cálculo do dano do Corpo Explosivo para a descrição
+        const corpseExplosionNextLevelDamage = 150 * (1 + (player.corpseExplosionLevel) * 0.15);
+
         const allUpgrades = [
             { name: "Cadência Rápida", desc: "+10% velocidade de tiro", apply: p => { p.shootCooldown *= 0.90; p.cadenceUpgrades++; }, available: p => p.cadenceUpgrades < 4 },
             { name: "Bala Potente", desc: "+20% dano", apply: p => p.bulletDamage = Math.ceil(p.bulletDamage * 1.2), available: () => true },
@@ -1133,6 +1213,16 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Velocista", desc: "+10% velocidade de mov.", apply: p => p.speed *= 1.1, available: () => true },
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
             { name: "Chame um Amigo", desc: "Cria um ajudante que atira.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => currentWave >= 4 && !p.ally && currentWave >= p.allyCooldownWave },
+            { 
+                name: player.hasCorpseExplosion ? "Aprimorar Corpo Explosivo" : "Corpo Explosivo", 
+                desc: player.hasCorpseExplosion ? `Inimigos explodem em 8 projéteis ao morrer. Dano aumentado para ${Math.floor(corpseExplosionNextLevelDamage)} (+15%).` : "Inimigos explodem em 8 projéteis ao morrer (150 de dano).",
+                apply: p => {
+                    p.hasCorpseExplosion = true;
+                    p.corpseExplosionLevel++;
+                    if(isMultiplayer) socket.emit('playerGotCorpseExplosion', { level: p.corpseExplosionLevel });
+                },
+                available: p => currentWave >= 4 && p.corpseExplosionLevel < 5 // Limite de 5 níveis
+            },
             { name: "Fúria dos Céus", desc: "A cada 9s, 3 raios caem do céu. Efeito permanente.", apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, available: p => currentWave >= 8 && !p.hasLightning },
             { name: "Escudo Mágico", desc: "Cria um escudo com 2500 de vida. Renovar restaura-o.", apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 },
             { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (150 dano). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction }
