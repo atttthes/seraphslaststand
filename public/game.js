@@ -80,26 +80,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const RICOCHET_LINE_Y_RATIO = 0.2 * 0.75;   // 0.15
     const SNIPER_LINE_Y_RATIO = 0.1 * 0.75;     // 0.075
 
-    // --- CONFIGS DE HORDAS (ATUALIZADO: HP reduzido em 40%) ---
+    // --- CONFIGS DE HORDAS (ATUALIZADO: HP reduzido em 40% e VELOCIDADE reduzida em 20%) ---
     const WAVE_CONFIG = [
-        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
     ];
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
         width: 8, height: 13, isSniper: true,
-        speed: 1.0, horizontalSpeed: 0.5
+        speed: 0.8, horizontalSpeed: 0.5
     };
     const RICOCHET_CONFIG = { 
-        type: 'ricochet', color: '#FF69B4', hp: 150, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, 
+        type: 'ricochet', color: '#FF69B4', hp: 150, speed: 0.96, horizontalSpeed: 0.6, projectileDamage: 20, 
         shootCooldown: 4200, isRicochet: true, width: 10, height: 10
     };
     const BOSS_CONFIG = {
-        type: 'boss', color: '#FFFFFF', hp: 300, speed: 1.2, horizontalSpeed: 0.8, damage: 50,
+        type: 'boss', color: '#FFFFFF', hp: 300, speed: 0.96, horizontalSpeed: 0.8, damage: 50,
         projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.width = 10; this.height = 14;
             this.velocityY = 0;
             this.speed = 2.1;
-            this.jumpForce = 4; // ATUALIZADO: Pulo reduzido em 75%
+            this.jumpForce = 5; // ATUALIZADO: Pulo aumentado em 25%
             this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
             this.shootCooldown = 300;
@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.corpseExplosionLevel = 0;
             
             this.shield = {
-                active: false, hp: 0, maxHp: 2500, radius: 80,
+                active: false, hp: 0, maxHp: 2500, radius: 25, // ATUALIZADO: Raio do escudo reduzido
                 auraFlicker: 0
             };
         }
@@ -929,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath();
             ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
             ctx.lineTo(player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000, player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000);
-            ctx.strokeStyle = 'rgba(0, 255, 127, 0.6)'; // ATUALIZADO: Opacidade da mira
+            ctx.strokeStyle = 'rgba(0, 255, 127, 0.4)'; // ATUALIZADO: Opacidade da mira
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.restore();

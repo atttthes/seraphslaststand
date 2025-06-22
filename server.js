@@ -15,12 +15,10 @@ const PORT = process.env.PORT || 10000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Servir o index.html a partir do diretório raiz do projeto, não de 'public'
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Servir os arquivos estáticos (js, css) do diretório raiz
 app.use(express.static(__dirname));
 
 // --- API para o Ranking ---
@@ -51,34 +49,33 @@ app.post('/api/ranking', async (req, res) => {
 // --- Lógica do Multiplayer com Socket.IO ---
 const rooms = {};
 const MAX_PLAYERS_PER_ROOM = 4;
-// ATUALIZADO: Dimensões lógicas para paisagem (16:9)
 const LOGICAL_WIDTH = 1600;
 const LOGICAL_HEIGHT = 900;
-const GAME_TICK_RATE = 1000 / 60; // 60 updates per second
-const ENEMY_SHOOT_DELAY_TICKS = 18; // 0.3s * 60fps
+const GAME_TICK_RATE = 1000 / 60;
+const ENEMY_SHOOT_DELAY_TICKS = 18;
 
-// --- Constantes de Posição (Proporções agora aplicadas à nova altura) ---
-const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5;
-const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3;
-const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2; // 180 / 900
-const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1;  // 90 / 900
+// ATUALIZADO: Linhas de defesa 25% mais altas
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5 * 0.75;    // 0.375
+const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;       // 0.225
+const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;   // 0.15
+const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;     // 0.075
 
-// --- Configurações das Hordas e Inimigos (Tamanhos atualizados) ---
+// ATUALIZADO: HP dos inimigos reduzido em 40% e VELOCIDADE reduzida em 20%
 const WAVE_CONFIG = [
-    { type: 'basic', color: '#FF4136', hp: 120, speed: 1.3, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-    { type: 'basic', color: '#FF4136', hp: 150, speed: 1.4, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-    { type: 'basic', color: '#FF4136', hp: 200, speed: 1.5, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-    { type: 'basic', color: '#FF4136', hp: 280, speed: 1.6, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-    { type: 'basic', color: '#FF4136', hp: 350, speed: 1.7, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+    { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
+    { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
+    { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
+    { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
+    { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
 ];
 const BOSS_CONFIG = {
-    type: 'boss', color: '#FFFFFF', hp: 500, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 180, height: 180, isBoss: true // TAMANHO ATUALIZADO
+    type: 'boss', color: '#FFFFFF', hp: 300, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true
 };
 const RICOCHET_CONFIG = { 
-    type: 'ricochet', color: '#FF69B4', hp: 250, speed: 1.2, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 55, height: 55 // TAMANHO ATUALIZADO
+    type: 'ricochet', color: '#FF69B4', hp: 150, speed: 0.96, horizontalSpeed: 0.6, projectileDamage: 20, shootCooldown: 4200, isRicochet: true, width: 10, height: 10
 };
 const SNIPER_CONFIG = {
-    type: 'sniper', color: '#00FFFF', speed: 1.0, horizontalSpeed: 0.5, isSniper: true, width: 50, height: 70 // TAMANHO ATUALIZADO
+    type: 'sniper', color: '#00FFFF', speed: 0.8, horizontalSpeed: 0.5, isSniper: true, width: 8, height: 13
 };
 const WAVE_INTERVAL_SECONDS = 10;
 
@@ -130,7 +127,7 @@ function findOrCreateRoom() {
         lightningStrikes: [], 
         gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5,
         classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 },
-        bladeHits: {} // BUGFIX: Controla os acertos da lâmina por jogador
+        bladeHits: {}
     };
     console.log(`Nova sala criada: ${newRoomName}`);
     return newRoomName;
@@ -139,10 +136,10 @@ function findOrCreateRoom() {
 function spawnEnemy(room, waveConfig) {
     room.enemies.push({
         id: `enemy_${Date.now()}_${Math.random()}`,
-        x: Math.random() * (LOGICAL_WIDTH - 60), y: -50, // TAMANHO ATUALIZADO
-        width: 60, height: 60, // TAMANHO ATUALIZADO
+        x: Math.random() * (LOGICAL_WIDTH - 10), y: -50,
+        width: 10, height: 10,
         ...waveConfig, maxHp: waveConfig.hp,
-        lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
+        lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0,
         horizontalSpeed: waveConfig.speed / 2,
     });
 }
@@ -158,7 +155,7 @@ function spawnSniper(room, waveConfig) {
         damage: baseDamage * 0.5, 
         projectileDamage: baseProjDamage * 1.15,
         shootCooldown: waveConfig.shootCooldown * 1.30 * 1.2,
-        lastShotTime: 0, patrolOriginX: null, reachedPosition: false,
+        lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0,
     };
     room.enemies.push(sniper);
 }
@@ -169,7 +166,7 @@ function spawnRicochet(room, wave) {
         id: `ricochet_${Date.now()}_${Math.random()}`,
         x: Math.random() * (LOGICAL_WIDTH - ricochetConfig.width), y: -50,
         ...ricochetConfig, maxHp: ricochetConfig.hp, lastShotTime: 0,
-        patrolOriginX: null, reachedPosition: false,
+        patrolOriginX: null, reachedPosition: false, baseY: 0,
     });
 }
 
@@ -178,9 +175,9 @@ function spawnBoss(room, wave) {
     room.enemies.push({
         id: `boss_${Date.now()}_${Math.random()}`,
         x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height,
-        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 1.2,
+        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 0.96, // ATUALIZADO: Velocidade vertical do chefe reduzida
         maxHp: bossConfig.hp, lastShotTime: 0,
-        patrolOriginX: null, reachedPosition: false,
+        patrolOriginX: null, reachedPosition: false, baseY: 0,
     });
 }
 
@@ -201,13 +198,13 @@ function shootForEnemy(enemy, room, targetPlayer) {
     if (enemy.isRicochet) {
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
-        const angle = Math.atan2((targetPlayer.y + 40) - projectile.y, (virtualPlayerX + 30) - projectile.x); // player height/2, width/2
+        const angle = Math.atan2((targetPlayer.y + 7) - projectile.y, (virtualPlayerX + 5) - projectile.x);
         projectile.vx = Math.cos(angle) * 8;
         projectile.vy = Math.sin(angle) * 8;
         projectile.canRicochet = true;
         projectile.bouncesLeft = 1;
     } else {
-        const angle = Math.atan2((targetPlayer.y + 40) - projectile.y, (targetPlayer.x + 30) - projectile.x); // player height/2, width/2
+        const angle = Math.atan2((targetPlayer.y + 7) - projectile.y, (targetPlayer.x + 5) - projectile.x);
         const speed = enemy.isSniper ? 7 : 5;
         projectile.vx = Math.cos(angle) * speed;
         projectile.vy = Math.sin(angle) * speed;
@@ -235,7 +232,7 @@ setInterval(() => {
                 room.waveTimer--;
                 if (room.waveTimer <= 0) {
                     room.wave++; room.waveState = 'active';
-                    room.bladeHits = {}; // BUGFIX: Reseta os acertos da lâmina para a nova horda
+                    room.bladeHits = {};
                     io.to(roomName).emit('waveStart', room.wave);
                     const waveConfig = getWaveConfig(room.wave);
                     
@@ -277,7 +274,7 @@ setInterval(() => {
             lightningPlayers.forEach(player => {
                 for (let i = 0; i < 3; i++) {
                     const strikeX = Math.random() * LOGICAL_WIDTH;
-                    const strikeWidth = 60 * 1.2; // Player width
+                    const strikeWidth = 10 * 1.2;
                     room.lightningStrikes.push({
                         id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime,
                     });
@@ -312,13 +309,13 @@ setInterval(() => {
                 if (enemy.y < targetY) { enemy.y += enemy.speed; } 
                 else { 
                     enemy.y = targetY; 
-                    enemy.baseY = targetY;
+                    enemy.baseY = targetY; // CORREÇÃO: Define o Y base para o bobbing
                     enemy.reachedPosition = true; 
                     enemy.patrolOriginX = enemy.x; 
                 }
             } else {
                 if (enemy.baseY) {
-                    const phase = enemy.id.charCodeAt(enemy.id.length - 1) || 0;
+                    const phase = (enemy.id.charCodeAt(enemy.id.length - 1) || 0) % (Math.PI * 2);
                     enemy.y = enemy.baseY + Math.sin(room.gameTime * 0.05 + phase) * 5;
                 }
                 const patrolSpeed = enemy.horizontalSpeed || enemy.speed / 2;
@@ -359,8 +356,7 @@ setInterval(() => {
                 room.enemyProjectiles.splice(i, 1); continue;
             }
             for (const player of playerList) {
-                // Player size: width 60, height 80
-                if (p.x > player.x && p.x < player.x + 60 && p.y > player.y && p.y < player.y + 80) {
+                if (p.x > player.x && p.x < player.x + 10 && p.y > player.y && p.y < player.y + 14) {
                     io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1); break; 
                 }
@@ -384,7 +380,7 @@ io.on('connection', (socket) => {
         room.players[socket.id] = { 
             id: socket.id, ...playerData, 
             hasAlly: false, allyCooldownWave: 0, hasLightning: false,
-            hasTotalReaction: false,
+            hasTotalReaction: false, hasCorpseExplosion: false, corpseExplosionLevel: 0,
         };
         console.log(`Jogador ${playerData.name || 'Anônimo'} (${socket.id}) entrou na sala ${roomName}.`);
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -422,16 +418,13 @@ io.on('connection', (socket) => {
         }
     });
     
-    // BUGFIX: Lógica da "Reação Total" corrigida
     socket.on('playerUsedTotalReaction', () => {
         const room = rooms[socket.room];
         if (room && room.players[socket.id] && room.players[socket.id].hasTotalReaction) {
-            // Prepara uma nova lista de inimigos atingidos para esta ativação da lâmina
             room.bladeHits[socket.id] = [];
         }
     });
 
-    // BUGFIX: Lógica de dano da "Reação Total" corrigida
     socket.on('bladeHitEnemy', (enemyId) => {
         const room = rooms[socket.room];
         if (!room) return;
@@ -439,10 +432,9 @@ io.on('connection', (socket) => {
         const player = room.players[socket.id];
         const enemy = room.enemies.find(e => e.id === enemyId);
 
-        // Verifica se o jogador pode usar a lâmina e se ainda não atingiu este inimigo nesta ativação
         if (player && player.hasTotalReaction && enemy && room.bladeHits && Array.isArray(room.bladeHits[socket.id]) && !room.bladeHits[socket.id].includes(enemyId)) {
             
-            room.bladeHits[socket.id].push(enemyId); // Registra o acerto para não causar dano duplo
+            room.bladeHits[socket.id].push(enemyId);
 
             enemy.hp -= 150; 
             if (enemy.hp <= 0) {
@@ -481,6 +473,14 @@ io.on('connection', (socket) => {
         room.players[socket.id].hasLightning = true;
     });
 
+    socket.on('playerGotCorpseExplosion', ({ level }) => {
+        const room = rooms[socket.room];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id].hasCorpseExplosion = true;
+            room.players[socket.id].corpseExplosionLevel = level;
+        }
+    });
+
     socket.on('playerGotTotalReaction', () => {
         const room = rooms[socket.room];
         if (room && room.players[socket.id]) {
@@ -493,7 +493,6 @@ io.on('connection', (socket) => {
         const roomName = socket.room;
         if (roomName && rooms[roomName]) {
             delete rooms[roomName].players[socket.id];
-            // CORREÇÃO APLICADA: Limpa dados de 'bladeHits' ao desconectar
             if(rooms[roomName].bladeHits) {
                 delete rooms[roomName].bladeHits[socket.id];
             }
