@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- ELEMENTOS DO DOM ---
     const mainMenu = document.getElementById('mainMenu');
-    const appWrapper = document.getElementById('app-wrapper'); // NOVO WRAPPER
+    const appWrapper = document.getElementById('app-wrapper');
     const gameContainer = document.getElementById('gameContainer');
     const backgroundCanvas = document.getElementById('backgroundCanvas');
     const bgCtx = backgroundCanvas.getContext('2d');
@@ -43,13 +43,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
     let gameTime = 0, animationFrameId, socket, playerName = "Jogador";
     let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
-    let logicalWidth = 1600, logicalHeight = 900;
+    
+    // ATUALIZADO: Sistema de Coordenadas Lógicas
+    const logicalWidth = 1600, logicalHeight = 900;
+    let scaleX = 1, scaleY = 1;
+
     let backgroundOrbs = [];
     let reactionBlade = { active: false, x: 0, y: 0, width: 0, height: 15, hitEnemies: [] };
     let reflectedProjectiles = [];
     
     const keys = { a: { pressed: false }, d: { pressed: false } };
-    const mouse = { x: 0, y: 0, down: false };
+    const mouse = { x: 0, y: 0, down: false }; // Coordenadas agora serão lógicas
     const aimStick = { active: false, angle: 0 };
     let aimAngle = 0;
 
@@ -61,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ENEMY_SHOOT_DELAY_TICKS = 18;
 
     // --- CONFIGURAÇÕES DO JOGO ---
-    const gravity = 0.6;
+    const gravity = 0.9; // Ajustado para coordenadas lógicas
     const NEON_GREEN = '#00ff7f';
     
     // --- Geometria do Chão ---
@@ -72,21 +76,21 @@ document.addEventListener('DOMContentLoaded', () => {
         [0.75, 0.86], [0.80, 0.86], [0.80, 0.82], [0.85, 0.82], [0.85, 0.78],
         [0.90, 0.78], [0.90, 0.74], [0.95, 0.74], [0.95, 0.70], [1.00, 0.70]
     ];
-    let floorPoints = [];
+    let floorPoints = []; // Agora conterá coordenadas lógicas
 
-    // --- Posições no Canvas (ATUALIZADO: Linhas 25% mais altas) ---
-    const DEFENSE_LINE_Y_RATIO = 0.5 * 0.75;    // 0.375
-    const BOSS_LINE_Y_RATIO = 0.3 * 0.75;       // 0.225
-    const RICOCHET_LINE_Y_RATIO = 0.2 * 0.75;   // 0.15
-    const SNIPER_LINE_Y_RATIO = 0.1 * 0.75;     // 0.075
+    // --- Posições no Canvas (Baseado em Coordenadas Lógicas) ---
+    const DEFENSE_LINE_Y = logicalHeight * 0.5 * 0.75;
+    const BOSS_LINE_Y = logicalHeight * 0.3 * 0.75;
+    const RICOCHET_LINE_Y = logicalHeight * 0.2 * 0.75;
+    const SNIPER_LINE_Y = logicalHeight * 0.1 * 0.75;
 
-    // --- CONFIGS DE HORDAS (ATUALIZADO: HP reduzido em 40% e VELOCIDADE reduzida em 20%) ---
+    // --- CONFIGS DE HORDAS (Valores de HP e Dano) ---
     const WAVE_CONFIG = [
-        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600, width: 10, height: 10 },
+        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360, width: 10, height: 10 },
+        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000, width: 10, height: 10 },
+        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640, width: 10, height: 10 },
+        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400, width: 10, height: 10 }
     ];
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
@@ -142,28 +146,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- FUNÇÃO DE DESENHO DO PERSONAGEM ---
     function drawTrashCan(x, y, width, height, color, aCtx = ctx) {
+        // ATUALIZADO: Recebe coordenadas lógicas e escala para desenhar
+        const sX = x * scaleX;
+        const sY = y * scaleY;
+        const sWidth = width * scaleX;
+        const sHeight = height * scaleY;
+        
         aCtx.save();
         aCtx.strokeStyle = color;
         aCtx.shadowColor = color;
         aCtx.shadowBlur = 15;
-        aCtx.lineWidth = Math.max(1, width / 15);
+        aCtx.lineWidth = Math.max(1, sWidth / 15);
 
-        const bodyHeight = height * 0.85;
-        const lidHeight = height * 0.15;
-        const lidWidth = width * 1.1;
-        const handleHeight = height * 0.1;
-        const handleWidth = width * 0.4;
+        const sBodyHeight = sHeight * 0.85;
+        const sLidHeight = sHeight * 0.15;
+        const sLidWidth = sWidth * 1.1;
+        const sHandleHeight = sHeight * 0.1;
+        const sHandleWidth = sWidth * 0.4;
 
         aCtx.beginPath();
-        aCtx.moveTo(x, y + lidHeight);
-        aCtx.lineTo(x + width, y + lidHeight);
-        aCtx.lineTo(x + width * 0.9, y + height);
-        aCtx.lineTo(x + width * 0.1, y + height);
+        aCtx.moveTo(sX, sY + sLidHeight);
+        aCtx.lineTo(sX + sWidth, sY + sLidHeight);
+        aCtx.lineTo(sX + sWidth * 0.9, sY + sHeight);
+        aCtx.lineTo(sX + sWidth * 0.1, sY + sHeight);
         aCtx.closePath();
         aCtx.stroke();
 
-        aCtx.strokeRect(x - (lidWidth - width) / 2, y, lidWidth, lidHeight);
-        aCtx.strokeRect(x + (width - handleWidth) / 2, y - handleHeight, handleWidth, handleHeight);
+        aCtx.strokeRect(sX - (sLidWidth - sWidth) / 2, sY, sLidWidth, sLidHeight);
+        aCtx.strokeRect(sX + (sWidth - sHandleWidth) / 2, sY - sHandleHeight, sHandleWidth, sHandleHeight);
         
         aCtx.restore();
     }
@@ -209,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const angle = Math.atan2((target.y + target.height / 2) - (this.y + this.height / 2), (target.x + target.width / 2) - (this.x + this.width / 2));
                 const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
                 projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x / (canvas.width / logicalWidth), y: bullet.y / (canvas.height / logicalHeight), angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
+                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
             }
         }
 
@@ -229,10 +239,10 @@ document.addEventListener('DOMContentLoaded', () => {
     class Player {
         constructor(x, y, name = "Player") {
             this.name = name; this.x = x; this.y = y;
-            this.width = 10; this.height = 14;
+            this.width = 16; this.height = 22; // Tamanho lógico
             this.velocityY = 0;
-            this.speed = 2.1;
-            this.jumpForce = 5; // ATUALIZADO: Pulo aumentado em 25%
+            this.speed = 5; // Velocidade em unidades lógicas
+            this.jumpForce = 12; // Força do pulo em unidades lógicas
             this.onGround = false;
             this.maxHp = 300; this.hp = this.maxHp;
             this.shootCooldown = 300;
@@ -242,25 +252,26 @@ document.addEventListener('DOMContentLoaded', () => {
             this.exp = 0; this.level = 1; this.expToNextLevel = 100;
             this.rerolls = 1;
             this.lastShootTime = 0;
-            this.bulletSpeed = 10;
+            this.bulletSpeed = 18; // Velocidade do projétil em unidades lógicas
             this.cadenceUpgrades = 0; this.ally = null; this.allyCooldownWave = 0;
             this.hasLightning = false; this.nextLightningTime = 0;
             this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3;
             this.currentReactionCooldown = 0;
 
-            // NOVO: Item Corpo Explosivo
             this.hasCorpseExplosion = false;
             this.corpseExplosionLevel = 0;
             
             this.shield = {
-                active: false, hp: 0, maxHp: 2500, radius: 25, // ATUALIZADO: Raio do escudo reduzido
+                active: false, hp: 0, maxHp: 2500, radius: 40, // Raio lógico
                 auraFlicker: 0
             };
         }
 
         drawShield() {
-            const centerX = this.x + this.width / 2;
-            const centerY = this.y + this.height / 2;
+            const sCenterX = (this.x + this.width / 2) * scaleX;
+            const sCenterY = (this.y + this.height / 2) * scaleY;
+            const sRadius = this.shield.radius * Math.min(scaleX, scaleY); // Escala o raio uniformemente
+
             this.shield.auraFlicker += 0.05;
             const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
             const shieldOpacity = 0.3 + 0.4 * (this.shield.hp / this.shield.maxHp);
@@ -268,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.shadowColor = NEON_GREEN;
             ctx.shadowBlur = auraSize;
             ctx.beginPath();
-            ctx.arc(centerX, centerY, this.shield.radius, 0, Math.PI * 2);
+            ctx.arc(sCenterX, sCenterY, sRadius, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(0, 255, 127, ${shieldOpacity})`;
             ctx.fill();
             ctx.shadowBlur = 0;
@@ -280,8 +291,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const color = this.isInvincible ? 'rgba(0, 255, 127, 0.5)' : NEON_GREEN;
             drawTrashCan(this.x, this.y, this.width, this.height, color);
 
-            ctx.fillStyle = 'white'; ctx.font = '12px VT323';
-            ctx.textAlign = 'center'; ctx.fillText(this.name, this.x + this.width / 2, this.y - 8);
+            // Desenha o nome do jogador
+            const sX = (this.x + this.width / 2) * scaleX;
+            const sY = this.y * scaleY;
+            ctx.fillStyle = 'white'; 
+            ctx.font = `${12 * Math.min(scaleX, scaleY)}px VT323`; // Escala a fonte
+            ctx.textAlign = 'center'; 
+            ctx.fillText(this.name, sX, sY - (8 * scaleY));
             if (this.ally) this.ally.draw();
         }
 
@@ -297,8 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (keys.a.pressed) this.x -= this.speed;
             if (keys.d.pressed) this.x += this.speed;
             
+            // Limites baseados no mundo lógico
             if (this.x < 0) this.x = 0;
-            if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+            if (this.x > logicalWidth - this.width) this.x = logicalWidth - this.width;
 
             const groundY = getGroundY(this.x + this.width / 2) - this.height;
             if (this.y + this.velocityY >= groundY) {
@@ -316,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.lastShootTime = now;
                 const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, NEON_GREEN, 'player');
                 projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x / (canvas.width / logicalWidth), y: bullet.y / (canvas.height / logicalHeight), angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
+                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
             }
         }
         
@@ -351,55 +368,61 @@ document.addEventListener('DOMContentLoaded', () => {
             this.maxHp = config.hp;
             this.patrolOriginX = null;
             this.reachedPosition = false;
-            this.baseY = 0; // Para movimento de "bobbing"
+            this.baseY = 0;
         }
 
         draw() {
+            const sX = this.x * scaleX;
+            const sY = this.y * scaleY;
+            const sWidth = this.width * scaleX;
+            const sHeight = this.height * scaleY;
+
             ctx.save();
             ctx.strokeStyle = this.color;
             ctx.shadowColor = this.color;
             ctx.shadowBlur = 10;
-            ctx.lineWidth = Math.max(1, this.width / 15);
-            ctx.strokeRect(this.x, this.y, this.width, this.height);
+            ctx.lineWidth = Math.max(1, sWidth / 15);
+            ctx.strokeRect(sX, sY, sWidth, sHeight);
             ctx.restore();
 
             const hpRatio = this.hp / this.maxHp;
+            const barY = sY - (8 * scaleY);
+            const barHeight = 3 * scaleY;
             ctx.fillStyle = '#555';
-            ctx.fillRect(this.x, this.y - 8, this.width, 3);
+            ctx.fillRect(sX, barY, sWidth, barHeight);
             ctx.fillStyle = hpRatio > 0.5 ? 'lightgreen' : hpRatio > 0.2 ? 'gold' : 'red';
-            ctx.fillRect(this.x, this.y - 8, this.width * hpRatio, 3);
+            ctx.fillRect(sX, barY, sWidth * hpRatio, barHeight);
         }
 
         update() {
             if (!isMultiplayer) {
                 let targetY;
-                if (this.isSniper) targetY = canvas.height * SNIPER_LINE_Y_RATIO;
-                else if (this.isRicochet) targetY = canvas.height * RICOCHET_LINE_Y_RATIO;
-                else if (this.isBoss) targetY = canvas.height * BOSS_LINE_Y_RATIO;
-                else targetY = canvas.height * DEFENSE_LINE_Y_RATIO;
+                if (this.isSniper) targetY = SNIPER_LINE_Y;
+                else if (this.isRicochet) targetY = RICOCHET_LINE_Y;
+                else if (this.isBoss) targetY = BOSS_LINE_Y;
+                else targetY = DEFENSE_LINE_Y;
 
                 if (!this.reachedPosition) {
                     if (this.y < targetY) { this.y += this.speed; } 
                     else { 
                         this.y = targetY; 
-                        this.baseY = targetY; // Define a posição Y base para o "bobbing"
+                        this.baseY = targetY;
                         this.reachedPosition = true; 
                         this.patrolOriginX = this.x;
                     }
                 } else {
-                    // Movimento vertical sutil (bobbing)
                     if (this.baseY) {
                         const phase = (this.id.charCodeAt(this.id.length - 1) || 0) % (Math.PI * 2);
                         this.y = this.baseY + Math.sin(gameTime * 0.05 + phase) * 5;
                     }
                     
                     const patrolSpeed = this.horizontalSpeed || this.speed / 2;
-                    if (!this.isRicochet) { // Ricochet inimigos patrulham diferente
+                    if (!this.isRicochet) {
                         const moveDirection = Math.sign(player.x - this.x);
                         this.x += moveDirection * patrolSpeed;
                     }
 
-                    const patrolRange = canvas.width * (this.isBoss ? 0.3 : 0.1);
+                    const patrolRange = logicalWidth * (this.isBoss ? 0.3 : 0.1);
                     const leftBoundary = this.patrolOriginX - (patrolRange / 2);
                     const rightBoundary = this.patrolOriginX + (patrolRange / 2);
                     if (this.x < leftBoundary) this.x = leftBoundary;
@@ -407,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 if (this.x < 0) this.x = 0;
-                if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+                if (this.x > logicalWidth - this.width) this.x = logicalWidth - this.width;
             }
             this.draw();
         }
@@ -416,22 +439,15 @@ document.addEventListener('DOMContentLoaded', () => {
     class Projectile {
         constructor(x, y, angle, speed, damage, color, owner = 'player', originId = null) {
             this.id = `proj_${Date.now()}_${Math.random()}`;
-            this.x = x; this.y = y;
+            this.x = x; this.y = y; // Coordenadas lógicas
             this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
             this.damage = damage; this.owner = owner; this.color = color;
             this.originId = originId;
             this.trail = [];
-            this.trailLength = 10; // Rastro mais curto parece melhor
-
-            // ATUALIZADO: Tamanho dos projéteis reduzido em 70%
-            if (owner === 'player' || owner === 'corpse_explosion' || owner === 'reflected' || owner === 'other_player') {
-                this.radius = 2;
-            } else { // 'enemy'
-                this.radius = 3;
-            }
+            this.trailLength = 10;
+            this.radius = 5; // Raio lógico
         }
 
-        // ATUALIZADO: Rastro de neon estilo "Seraph's Last Stand"
         drawTrail(aCtx = ctx) {
             if (this.trail.length < 2) return;
 
@@ -441,27 +457,31 @@ document.addEventListener('DOMContentLoaded', () => {
             aCtx.strokeStyle = this.color;
             aCtx.shadowColor = this.color;
             aCtx.shadowBlur = 10;
+            const sRadius = this.radius * Math.min(scaleX, scaleY);
 
             for (let i = 1; i < this.trail.length; i++) {
                 const startPoint = this.trail[i-1];
                 const endPoint = this.trail[i];
                 
-                // A opacidade e a espessura diminuem ao longo do rastro
                 aCtx.globalAlpha = (i / this.trail.length) * 0.8;
-                aCtx.lineWidth = this.radius * 1.5 * (i / this.trail.length);
+                aCtx.lineWidth = sRadius * 1.5 * (i / this.trail.length);
 
                 aCtx.beginPath();
-                aCtx.moveTo(startPoint.x, startPoint.y);
-                aCtx.lineTo(endPoint.x, endPoint.y);
+                aCtx.moveTo(startPoint.x * scaleX, startPoint.y * scaleY);
+                aCtx.lineTo(endPoint.x * scaleX, endPoint.y * scaleY);
                 aCtx.stroke();
             }
-            aCtx.restore(); // Restaura alpha, lineWidth, etc.
+            aCtx.restore();
         }
 
         draw(aCtx = ctx) {
             this.drawTrail(aCtx);
+            const sX = this.x * scaleX;
+            const sY = this.y * scaleY;
+            const sRadius = this.radius * Math.min(scaleX, scaleY);
+
             aCtx.beginPath();
-            aCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            aCtx.arc(sX, sY, sRadius, 0, Math.PI * 2);
             aCtx.fillStyle = this.color;
             aCtx.shadowColor = this.color;
             aCtx.shadowBlur = 5;
@@ -499,8 +519,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         cleanup(); isGameOver = false; gameTime = 0;
-        resizeCanvas();
-        player = new Player(canvas.width / 2, canvas.height - 200, playerName);
+        resizeCanvas(); // Essencial para definir a escala inicial
+        player = new Player(logicalWidth / 2, logicalHeight - 200, playerName);
         projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
         reflectedProjectiles = [];
         spState = { 
@@ -524,7 +544,12 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.width = gameRect.width;
         canvas.height = gameRect.height;
         
-        floorPoints = floorPath.map(p => ({ x: p[0] * canvas.width, y: p[1] * canvas.height }));
+        // ATUALIZADO: Calcula os fatores de escala
+        scaleX = canvas.width / logicalWidth;
+        scaleY = canvas.height / logicalHeight;
+        
+        // ATUALIZADO: Calcula os pontos do chão em coordenadas lógicas
+        floorPoints = floorPath.map(p => ({ x: p[0] * logicalWidth, y: p[1] * logicalHeight }));
     }
 
     function startGame(multiplayer) {
@@ -535,7 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
         init(); isGameRunning = true; animate();
     }
     
-    // NOVO: Função para criar a explosão de projéteis
     function createCorpseExplosion(enemy) {
         if (!player || !player.hasCorpseExplosion) return;
 
@@ -548,9 +572,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 enemy.x + enemy.width / 2, 
                 enemy.y + enemy.height / 2, 
                 angle, 
-                6, // Velocidade dos projéteis da explosão
+                12, // Velocidade lógica
                 damage, 
-                '#FFA500', // Cor laranja para distinguir
+                '#FFA500',
                 'corpse_explosion' 
             );
             projectiles.push(bullet);
@@ -561,11 +585,11 @@ document.addEventListener('DOMContentLoaded', () => {
         socket = io();
         socket.on('connect', () => {
             console.log("Conectado! ID:", socket.id);
+            // Envia dados lógicos
             socket.emit('joinMultiplayer', { name: player.name, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp });
         });
         socket.on('roomJoined', (data) => {
-            logicalWidth = data.logicalWidth;
-            logicalHeight = data.logicalHeight;
+            // Apenas para confirmação, as vars lógicas já são fixas
         });
         socket.on('waveStart', (wave) => {
             if (player.hasTotalReaction && player.currentReactionCooldown > 0) {
@@ -583,14 +607,12 @@ document.addEventListener('DOMContentLoaded', () => {
             spState.waveState = state.waveState; 
             spState.waveTimer = state.waveTimer * 60;
 
-            const scaleX = canvas.width / logicalWidth;
-            const scaleY = canvas.height / logicalHeight;
-
             const serverEnemyIds = state.enemies.map(e => e.id);
             enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
             state.enemies.forEach(eData => {
                 let enemy = enemies.find(e => e.id === eData.id);
-                const enemyConfig = { ...eData, x: eData.x * scaleX, y: eData.y * scaleY, width: eData.width, height: eData.height};
+                // ATUALIZADO: Apenas atribui os dados lógicos, sem escalar
+                const enemyConfig = { ...eData };
                 if (enemy) { Object.assign(enemy, enemyConfig); } 
                 else { enemies.push(new Enemy(enemyConfig)); }
             });
@@ -602,14 +624,16 @@ document.addEventListener('DOMContentLoaded', () => {
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
                 if (!p) {
-                   const newProj = new Projectile(pData.x * scaleX, pData.y * scaleY, 0, 0, pData.damage, pData.color, 'enemy', pData.originId);
+                   // ATUALIZADO: Cria projétil com dados lógicos
+                   const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, 'enemy', pData.originId);
                    newProj.id = pData.id;
                    newProj.velocity.x = pData.vx;
                    newProj.velocity.y = pData.vy;
                    enemyProjectiles.push(newProj);
                 } else {
-                   p.x = pData.x * scaleX;
-                   p.y = pData.y * scaleY;
+                   // ATUALIZADO: Atualiza dados lógicos
+                   p.x = pData.x;
+                   p.y = pData.y;
                 }
             });
 
@@ -619,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(pData.hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!pData.hasAlly && player.ally) player.ally = null;
                     if(pData.hasLightning) player.hasLightning = true;
-                    if(pData.hasCorpseExplosion && p.corpseExplosionLevel < pData.corpseExplosionLevel){
+                    if(pData.hasCorpseExplosion && player.corpseExplosionLevel < pData.corpseExplosionLevel){
                         player.hasCorpseExplosion = true;
                         player.corpseExplosionLevel = pData.corpseExplosionLevel;
                     }
@@ -637,9 +661,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const pData = state.players[id];
                 if(!otherPlayers[id]) {
-                    otherPlayers[id] = new Player(pData.x * scaleX, pData.y * scaleY, pData.name);
+                    // ATUALIZADO: Cria outros jogadores com coordenadas lógicas
+                    otherPlayers[id] = new Player(pData.x, pData.y, pData.name);
                 }
-                otherPlayers[id].x = pData.x * scaleX; otherPlayers[id].y = pData.y * scaleY;
+                // ATUALIZADO: Atualiza outros jogadores com coordenadas lógicas
+                otherPlayers[id].x = pData.x; otherPlayers[id].y = pData.y;
                 otherPlayers[id].hp = pData.hp; otherPlayers[id].name = pData.name;
                 if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } 
                 else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
@@ -650,13 +676,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('playerHit', (damage) => player.takeDamage(damage));
         socket.on('playerShot', (bulletData) => {
-            const scaleX = canvas.width / logicalWidth;
-            const scaleY = canvas.height / logicalHeight;
-            projectiles.push(new Projectile(bulletData.x * scaleX, bulletData.y * scaleY, bulletData.angle, bulletData.speed, bulletData.damage, NEON_GREEN, 'other_player'))
+            // ATUALIZADO: Cria projétil com dados lógicos recebidos
+            projectiles.push(new Projectile(bulletData.x, bulletData.y, bulletData.angle, bulletData.speed, bulletData.damage, NEON_GREEN, 'other_player'))
         });
         socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
             const enemy = enemies.find(e => e.id === enemyId);
-            if (enemy && isMultiplayer) { // Em MP, a explosão é local para quem tem o poder
+            if (enemy && isMultiplayer) {
                 const killerPlayer = killerId === socket.id ? player : otherPlayers[killerId];
                 if (killerPlayer && killerPlayer.hasCorpseExplosion) {
                     createCorpseExplosion(enemy);
@@ -671,6 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleAimingAndShooting() {
         let isAiming = false;
         if (aimStick.active) { isAiming = true; aimAngle = aimStick.angle; } 
+        // ATUALIZADO: Cálculo do ângulo usa coordenadas lógicas
         else if (mouse.down) { isAiming = true; aimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2)); }
         if (isAiming) player.shoot(aimAngle);
     }
@@ -680,18 +706,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ctx.save();
         ctx.strokeStyle = NEON_GREEN;
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 4 * Math.min(scaleX, scaleY);
         ctx.shadowColor = NEON_GREEN;
         ctx.shadowBlur = 10;
         
         ctx.beginPath();
-        ctx.moveTo(floorPoints[0].x, floorPoints[0].y);
+        // ATUALIZADO: Desenha o chão escalando os pontos lógicos
+        ctx.moveTo(floorPoints[0].x * scaleX, floorPoints[0].y * scaleY);
         for (let i = 1; i < floorPoints.length; i++) {
-            ctx.lineTo(floorPoints[i].x, floorPoints[i].y);
+            ctx.lineTo(floorPoints[i].x * scaleX, floorPoints[i].y * scaleY);
         }
         ctx.stroke();
 
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 * Math.min(scaleX, scaleY);
         ctx.shadowBlur = 5;
         const flatPart = floorPoints.slice(10, 12);
         const dripCount = 20;
@@ -701,15 +728,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const y = flatPart[0].y;
             const dripLength = 10 + Math.sin(i * 0.8) * 5 + Math.random() * 10;
             ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y + dripLength);
+            // ATUALIZADO: Desenha as "goteiras" escalando
+            ctx.moveTo(x * scaleX, y * scaleY);
+            ctx.lineTo(x * scaleX, (y + dripLength) * scaleY);
             ctx.stroke();
         }
         ctx.restore();
     }
 
     function getGroundY(x) {
-        if (floorPoints.length < 2) return canvas.height;
+        // ATUALIZADO: Função opera inteiramente com coordenadas lógicas
+        if (floorPoints.length < 2) return logicalHeight;
 
         for (let i = 0; i < floorPoints.length - 1; i++) {
             const p1 = floorPoints[i];
@@ -726,19 +755,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawLightning(x, width) {
+        // ATUALIZADO: x e width são lógicos, escalados para desenho
+        const sX = x * scaleX;
+        const sWidth = width * scaleX;
+        
         ctx.save();
         ctx.shadowColor = '#8A2BE2'; ctx.shadowBlur = 25;
         ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
-        ctx.lineWidth = 1 + Math.random() * 4;
+        ctx.lineWidth = (1 + Math.random() * 4) * Math.min(scaleX, scaleY);
         ctx.beginPath();
-        let currentY = 0;
-        ctx.moveTo(x, currentY);
+        let currentY = 0; // Começa no topo em pixels
+        let currentX = sX;
+        ctx.moveTo(currentX, currentY);
         while(currentY < canvas.height) {
-            const nextY = currentY + Math.random() * 30 + 20;
-            const nextX = x + (Math.random() - 0.5) * width;
+            const nextY = currentY + (Math.random() * 30 + 20) * scaleY;
+            const nextX = currentX + (Math.random() - 0.5) * sWidth;
             ctx.lineTo(nextX, nextY);
             currentY = nextY;
-            x = nextX;
+            currentX = nextX;
         }
         ctx.stroke();
         ctx.restore();
@@ -797,7 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const lightningDamage = WAVE_CONFIG[0].hp;
     
             for (let i = 0; i < 3; i++) {
-                const strikeX = Math.random() * canvas.width;
+                const strikeX = Math.random() * logicalWidth; // Posição lógica
                 const strikeWidth = player.width * 1.2;
                 lightningStrikes.push({ x: strikeX, width: strikeWidth, creationTime: gameTime });
                 enemies.forEach(enemy => {
@@ -809,7 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             enemies = enemies.filter(e => {
                 if (e.hp <= 0) {
-                    createCorpseExplosion(e); // Adiciona explosão aqui também
+                    createCorpseExplosion(e);
                     const expGain = e.isBoss ? 1000 : (e.isSniper ? 75 : (e.isRicochet ? 60 : 50));
                     player.addExp(expGain);
                     return false;
@@ -823,16 +857,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!player) return;
 
         let angle;
-        let speed = 5;
+        let speed = 10; // Velocidade lógica
 
         if (enemy.isRicochet) {
-            const wallX = (player.x > enemy.x) ? canvas.width : 0;
-            const virtualPlayerX = (wallX === 0) ? -player.x : (2 * canvas.width - player.x);
+            const wallX = (player.x > enemy.x) ? logicalWidth : 0;
+            const virtualPlayerX = (wallX === 0) ? -player.x : (2 * logicalWidth - player.x);
             angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2));
-            speed = 8;
+            speed = 14;
         } else {
             angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
-            if (enemy.isSniper) speed = 7;
+            if (enemy.isSniper) speed = 16;
         }
 
         const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, 'enemy', enemy.id);
@@ -861,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const waveConfig = getSPWaveConfig(spState.wave);
                 const normalEnemyCount = spState.wave + 1;
                 for(let i = 0; i < normalEnemyCount; i++) {
-                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (canvas.width - 10), y: -50, width: 10, height: 10, horizontalSpeed: waveConfig.speed / 2 };
+                    const enemyConfig = { ...waveConfig, id: `enemy_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - waveConfig.width), y: -50, horizontalSpeed: waveConfig.speed / 2 };
                     setTimeout(() => enemies.push(new Enemy(enemyConfig)), i * 250);
                 }
 
@@ -870,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let i = 0; i < sniperCount; i++) {
                         const baseConfig = getSPWaveConfig(spState.wave);
                         const sniperConfig = {
-                            ...SNIPER_BASE_CONFIG, id: `sniper_${Date.now()}_${i}`, x: Math.random() * (canvas.width - SNIPER_BASE_CONFIG.width), y: -50,
+                            ...SNIPER_BASE_CONFIG, id: `sniper_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - SNIPER_BASE_CONFIG.width), y: -50,
                             hp: baseConfig.hp * SNIPER_BASE_CONFIG.hpMultiplier, damage: baseConfig.damage * SNIPER_BASE_CONFIG.damageMultiplier,
                             projectileDamage: baseConfig.projectileDamage * SNIPER_BASE_CONFIG.projectileDamageMultiplier, shootCooldown: baseConfig.shootCooldown * SNIPER_BASE_CONFIG.shootCooldownMultiplier
                         };
@@ -882,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const ricochetCount = Math.floor((spState.wave - 7) / 2) + 1;
                     const ricochetConfigBase = getSPRicochetConfig(spState.wave);
                     for (let i = 0; i < ricochetCount; i++) {
-                        const ricochetConfig = { ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`, x: Math.random() * (canvas.width - ricochetConfigBase.width), y: -50 };
+                        const ricochetConfig = { ...ricochetConfigBase, id: `ricochet_${Date.now()}_${i}`, x: Math.random() * (logicalWidth - ricochetConfigBase.width), y: -50 };
                         enemies.push(new Enemy(ricochetConfig));
                     }
                 }
@@ -891,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const bossCount = Math.floor((spState.wave - 10) / 3) + 1;
                     const bossConfigBase = getSPBossConfig(spState.wave);
                     for (let i = 0; i < bossCount; i++) {
-                        const bossConfig = { ...bossConfigBase, id: `boss_${Date.now()}_${i}`, x: (canvas.width / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height };
+                        const bossConfig = { ...bossConfigBase, id: `boss_${Date.now()}_${i}`, x: (logicalWidth / (bossCount + 1)) * (i + 1) - BOSS_CONFIG.width / 2, y: -BOSS_CONFIG.height };
                         enemies.push(new Enemy(bossConfig));
                     }
                 }
@@ -927,26 +961,27 @@ document.addEventListener('DOMContentLoaded', () => {
             let currentAimAngle = aimStick.active ? aimStick.angle : Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
             ctx.save();
             ctx.beginPath();
-            ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
-            ctx.lineTo(player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000, player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000);
-            ctx.strokeStyle = 'rgba(0, 255, 127, 0.4)'; // ATUALIZADO: Opacidade da mira
-            ctx.lineWidth = 2;
+            // ATUALIZADO: Desenha mira escalando a partir de coordenadas lógicas
+            ctx.moveTo((player.x + player.width / 2) * scaleX, (player.y + player.height / 2) * scaleY);
+            ctx.lineTo(
+                (player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000) * scaleX, 
+                (player.y + player.height / 2 + Math.sin(currentAimAngle) * 2000) * scaleY
+            );
+            ctx.strokeStyle = 'rgba(0, 255, 127, 0.4)';
+            ctx.lineWidth = 2 * Math.min(scaleX, scaleY);
             ctx.stroke();
             ctx.restore();
         }
 
         if (!isMultiplayer) updateSinglePlayerLogic();
-        else if (socket) socket.emit('playerUpdate', { x: player.x / (canvas.width / logicalWidth), y: player.y / (canvas.height / logicalHeight), hp: player.hp, name: player.name });
+        else if (socket) socket.emit('playerUpdate', { x: player.x, y: player.y, hp: player.hp, name: player.name });
 
         player.update();
         handleAimingAndShooting();
         Object.values(otherPlayers).forEach(p => p.draw());
         
-        const scaleX = canvas.width / logicalWidth;
         lightningStrikes.forEach(strike => {
-            const strikeXPos = isMultiplayer ? strike.x * scaleX : strike.x;
-            const strikeWidth = isMultiplayer ? strike.width * scaleX : strike.width;
-            for(let i=0; i<3; i++) drawLightning(strikeXPos, strikeWidth);
+            for(let i=0; i<3; i++) drawLightning(strike.x, strike.width);
         });
 
         if (reactionBlade.active) {
@@ -956,10 +991,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             ctx.save();
             ctx.beginPath();
-            ctx.moveTo(reactionBlade.x, reactionBlade.y + reactionBlade.height);
-            ctx.quadraticCurveTo(reactionBlade.x + reactionBlade.width / 2, reactionBlade.y - reactionBlade.height * 2, reactionBlade.x + reactionBlade.width, reactionBlade.y + reactionBlade.height);
+            ctx.moveTo(reactionBlade.x * scaleX, (reactionBlade.y + reactionBlade.height) * scaleY);
+            ctx.quadraticCurveTo(
+                (reactionBlade.x + reactionBlade.width / 2) * scaleX, 
+                (reactionBlade.y - reactionBlade.height * 2) * scaleY, 
+                (reactionBlade.x + reactionBlade.width) * scaleX, 
+                (reactionBlade.y + reactionBlade.height) * scaleY
+            );
             ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 10;
+            ctx.lineWidth = 10 * Math.min(scaleX, scaleY);
             ctx.shadowColor = '#FFFFFF';
             ctx.shadowBlur = 25;
             ctx.stroke();
@@ -970,12 +1010,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         projectiles.forEach((p, i) => {
             p.update();
-            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
+            if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) projectiles.splice(i, 1);
         });
         
         reflectedProjectiles.forEach((p, i) => {
             p.update();
-            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+            if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) {
                 reflectedProjectiles.splice(i, 1);
             }
         });
@@ -983,9 +1023,9 @@ document.addEventListener('DOMContentLoaded', () => {
         enemyProjectiles.forEach((p, i) => {
             if (!isMultiplayer) {
               if (p.canRicochet && p.bouncesLeft > 0) {
-                  if (p.x <= p.radius || p.x >= canvas.width - p.radius) {
+                  if (p.x <= p.radius || p.x >= logicalWidth - p.radius) {
                       p.velocity.x *= -1; p.bouncesLeft--;
-                      p.x = p.x <= p.radius ? p.radius + 1 : canvas.width - p.radius - 1;
+                      p.x = p.x <= p.radius ? p.radius + 1 : logicalWidth - p.radius - 1;
                   }
               }
               p.update();
@@ -993,12 +1033,12 @@ document.addEventListener('DOMContentLoaded', () => {
               p.draw();
             }
 
-            if (p.x < -50 || p.x > canvas.width+50 || p.y < -50 || p.y > canvas.height+50) {
+            if (p.x < -50 || p.x > logicalWidth+50 || p.y < -50 || p.y > logicalHeight+50) {
                 if (!isMultiplayer) enemyProjectiles.splice(i, 1);
             }
         });
 
-        // --- LÓGICA DE COLISÃO ---
+        // --- LÓGICA DE COLISÃO (opera com coordenadas lógicas) ---
         if (reactionBlade.active) {
             for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
                 const ep = enemyProjectiles[i];
@@ -1023,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         enemy.hp -= 150;
                         if (enemy.hp <= 0) {
-                            createCorpseExplosion(enemy); // Adiciona explosão aqui também
+                            createCorpseExplosion(enemy);
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
                             setTimeout(() => {
                                 const currentIndex = enemies.findIndex(e => e.id === enemy.id);
@@ -1045,7 +1085,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     target.hp -= rp.damage;
                     if (target.hp <= 0) {
-                        createCorpseExplosion(target); // Adiciona explosão aqui
+                        createCorpseExplosion(target);
                         const expGain = target.isBoss ? 1000 : (target.isSniper ? 75 : (target.isRicochet ? 60 : 50));
                         setTimeout(() => {
                            const currentIndex = enemies.findIndex(e => e.id === target.id);
@@ -1100,13 +1140,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const proj = projectiles[projIndex];
                 if((proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
                     if (isMultiplayer) {
-                        // A lógica de dano para MP é tratada no servidor para evitar trapaças
-                        // Apenas a explosão visual é local.
                         socket.emit('enemyHit', { enemyId: enemy.id, damage: proj.damage });
-                    } else { // Lógica para Single Player
+                    } else {
                         enemy.hp -= proj.damage;
                         if(enemy.hp <= 0) {
-                            // Previne que uma explosão gere outra explosão
                             if(proj.owner !== 'corpse_explosion') {
                                 createCorpseExplosion(enemy);
                             }
@@ -1129,6 +1166,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkCollision(obj1, obj2) {
+        // ATUALIZADO: Colisão opera com coordenadas lógicas
         const r1 = obj1.radius || 0; const r2 = obj2.radius || 0;
         const w1 = obj1.width || 0; const h1 = obj1.height || 0;
         const w2 = obj2.width || 0; const h2 = obj2.height || 0;
@@ -1203,7 +1241,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const currentWave = spState.wave;
         
-        // NOVO: Cálculo do dano do Corpo Explosivo para a descrição
         const corpseExplosionNextLevelDamage = 150 * (1 + (player.corpseExplosionLevel) * 0.15);
 
         const allUpgrades = [
@@ -1221,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     p.corpseExplosionLevel++;
                     if(isMultiplayer) socket.emit('playerGotCorpseExplosion', { level: p.corpseExplosionLevel });
                 },
-                available: p => currentWave >= 4 && p.corpseExplosionLevel < 5 // Limite de 5 níveis
+                available: p => currentWave >= 4 && p.corpseExplosionLevel < 5
             },
             { name: "Fúria dos Céus", desc: "A cada 9s, 3 raios caem do céu. Efeito permanente.", apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, available: p => currentWave >= 8 && !p.hasLightning },
             { name: "Escudo Mágico", desc: "Cria um escudo com 2500 de vida. Renovar restaura-o.", apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 },
@@ -1248,7 +1285,13 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('keydown', (e) => { if (!isGameRunning || isPaused) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = true; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = true; break; case 'Space': case 'KeyW': case 'ArrowUp': if(player) player.jump(); break; } });
     window.addEventListener('keyup', (e) => { if (!isGameRunning) return; switch (e.code) { case 'KeyA': case 'ArrowLeft': keys.a.pressed = false; break; case 'KeyD': case 'ArrowRight': keys.d.pressed = false; break; } });
-    canvas.addEventListener('mousemove', (e) => { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
+    
+    // ATUALIZADO: Converte coordenadas do mouse para o sistema lógico
+    canvas.addEventListener('mousemove', (e) => { 
+        const r = canvas.getBoundingClientRect(); 
+        mouse.x = (e.clientX - r.left) / scaleX; 
+        mouse.y = (e.clientY - r.top) / scaleY; 
+    });
     canvas.addEventListener('mousedown', () => { if (isGameRunning && !isPaused) mouse.down = true; });
     window.addEventListener('mouseup', () => { mouse.down = false; });
 

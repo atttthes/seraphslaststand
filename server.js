@@ -54,19 +54,19 @@ const LOGICAL_HEIGHT = 900;
 const GAME_TICK_RATE = 1000 / 60;
 const ENEMY_SHOOT_DELAY_TICKS = 18;
 
-// ATUALIZADO: Linhas de defesa 25% mais altas
-const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5 * 0.75;    // 0.375
-const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;       // 0.225
-const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;   // 0.15
-const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;     // 0.075
+// Posições de defesa no mundo lógico
+const DEFENSE_LINE_Y = LOGICAL_HEIGHT * 0.5 * 0.75;
+const BOSS_LINE_Y = LOGICAL_HEIGHT * 0.3 * 0.75;
+const RICOCHET_LINE_Y = LOGICAL_HEIGHT * 0.2 * 0.75;
+const SNIPER_LINE_Y = LOGICAL_HEIGHT * 0.1 * 0.75;
 
-// ATUALIZADO: HP dos inimigos reduzido em 40% e VELOCIDADE reduzida em 20%
+// ATUALIZADO: Adicionado width/height às configs para consistência
 const WAVE_CONFIG = [
-    { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600 },
-    { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360 },
-    { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000 },
-    { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640 },
-    { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400 }
+    { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600, width: 10, height: 10 },
+    { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360, width: 10, height: 10 },
+    { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000, width: 10, height: 10 },
+    { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640, width: 10, height: 10 },
+    { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400, width: 10, height: 10 }
 ];
 const BOSS_CONFIG = {
     type: 'boss', color: '#FFFFFF', hp: 300, speed: 0.8, damage: 50, projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true
@@ -136,9 +136,9 @@ function findOrCreateRoom() {
 function spawnEnemy(room, waveConfig) {
     room.enemies.push({
         id: `enemy_${Date.now()}_${Math.random()}`,
-        x: Math.random() * (LOGICAL_WIDTH - 10), y: -50,
-        width: 10, height: 10,
-        ...waveConfig, maxHp: waveConfig.hp,
+        x: Math.random() * (LOGICAL_WIDTH - waveConfig.width), y: -50,
+        ...waveConfig, // Contém width e height
+        maxHp: waveConfig.hp,
         lastShotTime: 0, patrolOriginX: null, reachedPosition: false, baseY: 0,
         horizontalSpeed: waveConfig.speed / 2,
     });
@@ -175,7 +175,7 @@ function spawnBoss(room, wave) {
     room.enemies.push({
         id: `boss_${Date.now()}_${Math.random()}`,
         x: LOGICAL_WIDTH / 2 - bossConfig.width / 2, y: -bossConfig.height,
-        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 0.96, // ATUALIZADO: Velocidade vertical do chefe reduzida
+        ...bossConfig, horizontalSpeed: bossConfig.speed, speed: 0.96,
         maxHp: bossConfig.hp, lastShotTime: 0,
         patrolOriginX: null, reachedPosition: false, baseY: 0,
     });
@@ -186,6 +186,10 @@ function shootForEnemy(enemy, room, targetPlayer) {
     
     const now = Date.now();
     enemy.lastShotTime = now;
+    // Tamanho lógico do jogador para mira
+    const playerLogicalWidth = 16;
+    const playerLogicalHeight = 22;
+
     let projectile = {
         id: `ep_${now}_${Math.random()}`,
         x: enemy.x + enemy.width / 2,
@@ -198,14 +202,14 @@ function shootForEnemy(enemy, room, targetPlayer) {
     if (enemy.isRicochet) {
         const wallX = (targetPlayer.x > enemy.x) ? LOGICAL_WIDTH : 0;
         const virtualPlayerX = (wallX === 0) ? -targetPlayer.x : (2 * LOGICAL_WIDTH - targetPlayer.x);
-        const angle = Math.atan2((targetPlayer.y + 7) - projectile.y, (virtualPlayerX + 5) - projectile.x);
-        projectile.vx = Math.cos(angle) * 8;
-        projectile.vy = Math.sin(angle) * 8;
+        const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (virtualPlayerX + playerLogicalWidth/2) - projectile.x);
+        projectile.vx = Math.cos(angle) * 14; // Velocidade lógica
+        projectile.vy = Math.sin(angle) * 14;
         projectile.canRicochet = true;
         projectile.bouncesLeft = 1;
     } else {
-        const angle = Math.atan2((targetPlayer.y + 7) - projectile.y, (targetPlayer.x + 5) - projectile.x);
-        const speed = enemy.isSniper ? 7 : 5;
+        const angle = Math.atan2((targetPlayer.y + playerLogicalHeight/2) - projectile.y, (targetPlayer.x + playerLogicalWidth/2) - projectile.x);
+        const speed = enemy.isSniper ? 16 : 10; // Velocidades lógicas
         projectile.vx = Math.cos(angle) * speed;
         projectile.vy = Math.sin(angle) * speed;
     }
@@ -274,7 +278,7 @@ setInterval(() => {
             lightningPlayers.forEach(player => {
                 for (let i = 0; i < 3; i++) {
                     const strikeX = Math.random() * LOGICAL_WIDTH;
-                    const strikeWidth = 10 * 1.2;
+                    const strikeWidth = 16 * 1.2; // Baseado no tamanho lógico do player
                     room.lightningStrikes.push({
                         id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime,
                     });
@@ -309,7 +313,7 @@ setInterval(() => {
                 if (enemy.y < targetY) { enemy.y += enemy.speed; } 
                 else { 
                     enemy.y = targetY; 
-                    enemy.baseY = targetY; // CORREÇÃO: Define o Y base para o bobbing
+                    enemy.baseY = targetY;
                     enemy.reachedPosition = true; 
                     enemy.patrolOriginX = enemy.x; 
                 }
@@ -356,7 +360,10 @@ setInterval(() => {
                 room.enemyProjectiles.splice(i, 1); continue;
             }
             for (const player of playerList) {
-                if (p.x > player.x && p.x < player.x + 10 && p.y > player.y && p.y < player.y + 14) {
+                // Colisão lógica projétil-jogador
+                const playerLogicalWidth = 16;
+                const playerLogicalHeight = 22;
+                if (p.x > player.x && p.x < player.x + playerLogicalWidth && p.y > player.y && p.y < player.y + playerLogicalHeight) {
                     io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1); break; 
                 }
