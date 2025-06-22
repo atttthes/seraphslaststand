@@ -72,8 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const ENEMY_SHOOT_DELAY_TICKS = 18;
 
     // --- CONFIGURAÇÕES DO JOGO ---
-    const gravity = 0.9; // Ajustado para coordenadas lógicas
+    const gravity = 0.9;
     const NEON_GREEN = '#00ff7f';
+    const SCALE_FACTOR = 1.33; // Fator de escala de 33%
     
     // --- Geometria do Chão ---
     const floorPath = [
@@ -92,26 +93,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const SNIPER_LINE_Y = logicalHeight * 0.1 * 0.75;
 
     // --- CONFIGS DE HORDAS (Valores de HP e Dano) ---
+    // ATUALIZADO: Configs com tamanho e atributos aumentados em 33%
     const WAVE_CONFIG = [
-        { type: 'basic', color: '#FF4136', hp: 72, speed: 1.04, damage: 15, projectileDamage: 10, shootCooldown: 3600, width: 10, height: 10 },
-        { type: 'basic', color: '#FF4136', hp: 90, speed: 1.12, damage: 18, projectileDamage: 12, shootCooldown: 3360, width: 10, height: 10 },
-        { type: 'basic', color: '#FF4136', hp: 120, speed: 1.2, damage: 22, projectileDamage: 15, shootCooldown: 3000, width: 10, height: 10 },
-        { type: 'basic', color: '#FF4136', hp: 168, speed: 1.28, damage: 25, projectileDamage: 18, shootCooldown: 2640, width: 10, height: 10 },
-        { type: 'basic', color: '#FF4136', hp: 210, speed: 1.36, damage: 30, projectileDamage: 22, shootCooldown: 2400, width: 10, height: 10 }
+        { type: 'basic', color: '#FF4136', hp: Math.floor(72 * SCALE_FACTOR), speed: 1.04 * SCALE_FACTOR, damage: Math.floor(15 * SCALE_FACTOR), projectileDamage: Math.floor(10 * SCALE_FACTOR), shootCooldown: 3600, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
+        { type: 'basic', color: '#FF4136', hp: Math.floor(90 * SCALE_FACTOR), speed: 1.12 * SCALE_FACTOR, damage: Math.floor(18 * SCALE_FACTOR), projectileDamage: Math.floor(12 * SCALE_FACTOR), shootCooldown: 3360, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
+        { type: 'basic', color: '#FF4136', hp: Math.floor(120 * SCALE_FACTOR), speed: 1.2 * SCALE_FACTOR, damage: Math.floor(22 * SCALE_FACTOR), projectileDamage: Math.floor(15 * SCALE_FACTOR), shootCooldown: 3000, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
+        { type: 'basic', color: '#FF4136', hp: Math.floor(168 * SCALE_FACTOR), speed: 1.28 * SCALE_FACTOR, damage: Math.floor(25 * SCALE_FACTOR), projectileDamage: Math.floor(18 * SCALE_FACTOR), shootCooldown: 2640, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR },
+        { type: 'basic', color: '#FF4136', hp: Math.floor(210 * SCALE_FACTOR), speed: 1.36 * SCALE_FACTOR, damage: Math.floor(30 * SCALE_FACTOR), projectileDamage: Math.floor(22 * SCALE_FACTOR), shootCooldown: 2400, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR }
     ];
     const SNIPER_BASE_CONFIG = {
         type: 'sniper', color: '#00FFFF', hpMultiplier: 0.8, damageMultiplier: 0.5,
         projectileDamageMultiplier: 1.15, shootCooldownMultiplier: 1.30 * 1.2,
-        width: 8, height: 13, isSniper: true,
-        speed: 0.8, horizontalSpeed: 0.5
+        width: 8 * SCALE_FACTOR, height: 13 * SCALE_FACTOR, isSniper: true,
+        speed: 0.8 * SCALE_FACTOR, horizontalSpeed: 0.5 * SCALE_FACTOR
     };
-    const RICOCHET_CONFIG = { 
-        type: 'ricochet', color: '#FF69B4', hp: 150, speed: 0.96, horizontalSpeed: 0.6, projectileDamage: 20, 
-        shootCooldown: 4200, isRicochet: true, width: 10, height: 10
+    const RICOCHET_CONFIG = {
+        type: 'ricochet', color: '#FF69B4', hp: Math.floor(150 * SCALE_FACTOR), speed: 0.96 * SCALE_FACTOR, horizontalSpeed: 0.6 * SCALE_FACTOR, projectileDamage: Math.floor(20 * SCALE_FACTOR),
+        shootCooldown: 4200, isRicochet: true, width: 10 * SCALE_FACTOR, height: 10 * SCALE_FACTOR
     };
     const BOSS_CONFIG = {
-        type: 'boss', color: '#FFFFFF', hp: 300, speed: 0.96, horizontalSpeed: 0.8, damage: 50,
-        projectileDamage: 35, shootCooldown: 1440, width: 30, height: 30, isBoss: true
+        type: 'boss', color: '#FFFFFF', hp: Math.floor(300 * SCALE_FACTOR), speed: 0.96 * SCALE_FACTOR, horizontalSpeed: 0.8 * SCALE_FACTOR, damage: Math.floor(50 * SCALE_FACTOR),
+        projectileDamage: Math.floor(35 * SCALE_FACTOR), shootCooldown: 1440, width: 30 * SCALE_FACTOR, height: 30 * SCALE_FACTOR, isBoss: true
     };
     const WAVE_INTERVAL_TICKS = 10 * 60;
 
@@ -244,22 +246,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     class Player {
-        constructor(x, y, name = "Player") {
+        // ATUALIZADO: Construtor aceita cor
+        constructor(x, y, name = "Player", color = NEON_GREEN) {
             this.name = name; this.x = x; this.y = y;
-            this.width = 16; this.height = 22; // Tamanho lógico
+            this.color = color; // ATUALIZADO
+            // ATUALIZADO: Atributos escalados
+            this.width = 16 * SCALE_FACTOR; this.height = 22 * SCALE_FACTOR;
             this.velocityY = 0;
-            this.speed = 5; // Velocidade em unidades lógicas
-            this.jumpForce = 12; // Força do pulo em unidades lógicas
+            this.speed = 5 * SCALE_FACTOR;
+            this.jumpForce = 12 * SCALE_FACTOR;
             this.onGround = false;
-            this.maxHp = 300; this.hp = this.maxHp;
+            this.maxHp = 300 * SCALE_FACTOR; this.hp = this.maxHp;
             this.shootCooldown = 300;
-            this.bulletDamage = 70;
+            this.bulletDamage = 70 * SCALE_FACTOR;
             
             this.isInvincible = false; this.invincibleTime = 500;
             this.exp = 0; this.level = 1; this.expToNextLevel = 100;
             this.rerolls = 1;
             this.lastShootTime = 0;
-            this.bulletSpeed = 18; // Velocidade do projétil em unidades lógicas
+            this.bulletSpeed = 18 * SCALE_FACTOR;
             this.cadenceUpgrades = 0; this.ally = null; this.allyCooldownWave = 0;
             this.hasLightning = false; this.nextLightningTime = 0;
             this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3;
@@ -269,7 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
             this.corpseExplosionLevel = 0;
             
             this.shield = {
-                active: false, hp: 0, maxHp: 2500, radius: 40, // Raio lógico
+                active: false,
+                hp: 0,
+                maxHp: 2500 * SCALE_FACTOR, // Escudo escalado
+                radius: 40 * SCALE_FACTOR, // Raio lógico escalado
                 auraFlicker: 0
             };
         }
@@ -277,17 +285,17 @@ document.addEventListener('DOMContentLoaded', () => {
         drawShield() {
             const sCenterX = (this.x + this.width / 2) * scaleX;
             const sCenterY = (this.y + this.height / 2) * scaleY;
-            const sRadius = this.shield.radius * Math.min(scaleX, scaleY); // Escala o raio uniformemente
+            const sRadius = this.shield.radius * Math.min(scaleX, scaleY);
 
             this.shield.auraFlicker += 0.05;
             const auraSize = 15 + Math.sin(this.shield.auraFlicker) * 5;
-            const shieldOpacity = 0.3 + 0.4 * (this.shield.hp / this.shield.maxHp);
             
-            ctx.shadowColor = NEON_GREEN;
+            // ATUALIZADO: Cor e opacidade do escudo
+            ctx.shadowColor = '#FFD700';
             ctx.shadowBlur = auraSize;
             ctx.beginPath();
             ctx.arc(sCenterX, sCenterY, sRadius, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(0, 255, 127, ${shieldOpacity})`;
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
             ctx.fill();
             ctx.shadowBlur = 0;
         }
@@ -295,8 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
         draw() {
             if (this.shield.active) this.drawShield();
             
-            const color = this.isInvincible ? 'rgba(0, 255, 127, 0.5)' : NEON_GREEN;
-            drawTrashCan(this.x, this.y, this.width, this.height, color);
+            // ATUALIZADO: Cor do jogador e do rastro de invencibilidade
+            const colorToDraw = this.isInvincible ? this.color + '80' : this.color; // Adiciona alpha para invencibilidade
+            drawTrashCan(this.x, this.y, this.width, this.height, colorToDraw);
 
             // Desenha o nome do jogador
             const sX = (this.x + this.width / 2) * scaleX;
@@ -338,9 +347,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const now = Date.now();
             if (now - this.lastShootTime > this.shootCooldown) {
                 this.lastShootTime = now;
-                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, NEON_GREEN, 'player');
+                const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, this.color, 'player');
                 projectiles.push(bullet);
-                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage });
+                if(isMultiplayer) socket.emit('playerShoot', { x: bullet.x, y: bullet.y, angle: bullet.angle, speed: bullet.speed, damage: bullet.damage, color: this.color });
             }
         }
         
@@ -452,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.originId = originId;
             this.trail = [];
             this.trailLength = 10;
-            this.radius = 5; // Raio lógico
+            this.radius = 5 * SCALE_FACTOR; // ATUALIZADO: Raio lógico escalado
         }
 
         drawTrail(aCtx = ctx) {
@@ -571,7 +580,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!player || !player.hasCorpseExplosion) return;
 
         const numProjectiles = 8;
-        const damage = 150 * (1 + (player.corpseExplosionLevel - 1) * 0.15);
+        // ATUALIZADO: Dano escalado
+        const baseDamage = 200; // 150 * 1.33
+        const damage = baseDamage * (1 + (player.corpseExplosionLevel - 1) * 0.15);
 
         for (let i = 0; i < numProjectiles; i++) {
             const angle = (i / numProjectiles) * Math.PI * 2;
@@ -579,7 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 enemy.x + enemy.width / 2, 
                 enemy.y + enemy.height / 2, 
                 angle, 
-                12, // Velocidade lógica
+                12 * SCALE_FACTOR, // Velocidade lógica
                 damage, 
                 '#FFA500',
                 'corpse_explosion' 
@@ -618,7 +629,6 @@ document.addEventListener('DOMContentLoaded', () => {
             enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
             state.enemies.forEach(eData => {
                 let enemy = enemies.find(e => e.id === eData.id);
-                // ATUALIZADO: Apenas atribui os dados lógicos, sem escalar
                 const enemyConfig = { ...eData };
                 if (enemy) { Object.assign(enemy, enemyConfig); } 
                 else { enemies.push(new Enemy(enemyConfig)); }
@@ -631,22 +641,23 @@ document.addEventListener('DOMContentLoaded', () => {
             state.enemyProjectiles.forEach(pData => {
                 let p = enemyProjectiles.find(ep => ep.id === pData.id);
                 if (!p) {
-                   // ATUALIZADO: Cria projétil com dados lógicos
                    const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, 'enemy', pData.originId);
                    newProj.id = pData.id;
                    newProj.velocity.x = pData.vx;
                    newProj.velocity.y = pData.vy;
+                   newProj.radius = pData.radius; // Recebe o raio do servidor
                    enemyProjectiles.push(newProj);
                 } else {
-                   // ATUALIZADO: Atualiza dados lógicos
                    p.x = pData.x;
                    p.y = pData.y;
                 }
             });
 
             for(const id in state.players) {
+                const pData = state.players[id];
+                // ATUALIZADO: Lógica de atualização do jogador principal
                 if (id === socket.id) {
-                    const pData = state.players[id];
+                    player.color = pData.color; // Atualiza a própria cor
                     if(pData.hasAlly && !player.ally) player.ally = new Ally(player);
                     if(!pData.hasAlly && player.ally) player.ally = null;
                     if(pData.hasLightning) player.hasLightning = true;
@@ -666,14 +677,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     continue;
                 }
-                const pData = state.players[id];
+
+                // ATUALIZADO: Lógica de criação/atualização de outros jogadores
                 if(!otherPlayers[id]) {
-                    // ATUALIZADO: Cria outros jogadores com coordenadas lógicas
-                    otherPlayers[id] = new Player(pData.x, pData.y, pData.name);
+                    otherPlayers[id] = new Player(pData.x, pData.y, pData.name, pData.color);
                 }
-                // ATUALIZADO: Atualiza outros jogadores com coordenadas lógicas
                 otherPlayers[id].x = pData.x; otherPlayers[id].y = pData.y;
                 otherPlayers[id].hp = pData.hp; otherPlayers[id].name = pData.name;
+                otherPlayers[id].color = pData.color; // Atualiza a cor dos outros
                 if (pData.hasAlly && !otherPlayers[id].ally) { otherPlayers[id].ally = new Ally(otherPlayers[id]); } 
                 else if (!pData.hasAlly && otherPlayers[id].ally) { otherPlayers[id].ally = null; }
                 if (pData.hasLightning) otherPlayers[id].hasLightning = true;
@@ -683,8 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('playerHit', (damage) => player.takeDamage(damage));
         socket.on('playerShot', (bulletData) => {
-            // ATUALIZADO: Cria projétil com dados lógicos recebidos
-            projectiles.push(new Projectile(bulletData.x, bulletData.y, bulletData.angle, bulletData.speed, bulletData.damage, NEON_GREEN, 'other_player'))
+            projectiles.push(new Projectile(bulletData.x, bulletData.y, bulletData.angle, bulletData.speed, bulletData.damage, bulletData.color || NEON_GREEN, 'other_player'))
         });
         socket.on('enemyDied', ({ enemyId, killerId, expGain }) => {
             const enemy = enemies.find(e => e.id === enemyId);
@@ -703,7 +713,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleAimingAndShooting() {
         let isAiming = false;
         if (aimStick.active) { isAiming = true; aimAngle = aimStick.angle; } 
-        // ATUALIZADO: Cálculo do ângulo usa coordenadas lógicas
         else if (mouse.down) { isAiming = true; aimAngle = Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2)); }
         if (isAiming) player.shoot(aimAngle);
     }
@@ -713,19 +722,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ctx.save();
         ctx.strokeStyle = NEON_GREEN;
-        ctx.lineWidth = 4 * Math.min(scaleX, scaleY);
+        ctx.lineWidth = 4; // Não escala
         ctx.shadowColor = NEON_GREEN;
         ctx.shadowBlur = 10;
         
         ctx.beginPath();
-        // ATUALIZADO: Desenha o chão escalando os pontos lógicos
         ctx.moveTo(floorPoints[0].x * scaleX, floorPoints[0].y * scaleY);
         for (let i = 1; i < floorPoints.length; i++) {
             ctx.lineTo(floorPoints[i].x * scaleX, floorPoints[i].y * scaleY);
         }
         ctx.stroke();
 
-        ctx.lineWidth = 2 * Math.min(scaleX, scaleY);
+        ctx.lineWidth = 2; // Não escala
         ctx.shadowBlur = 5;
         const flatPart = floorPoints.slice(10, 12);
         const dripCount = 20;
@@ -735,7 +743,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const y = flatPart[0].y;
             const dripLength = 10 + Math.sin(i * 0.8) * 5 + Math.random() * 10;
             ctx.beginPath();
-            // ATUALIZADO: Desenha as "goteiras" escalando
             ctx.moveTo(x * scaleX, y * scaleY);
             ctx.lineTo(x * scaleX, (y + dripLength) * scaleY);
             ctx.stroke();
@@ -744,7 +751,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getGroundY(x) {
-        // ATUALIZADO: Função opera inteiramente com coordenadas lógicas
         if (floorPoints.length < 2) return logicalHeight;
 
         for (let i = 0; i < floorPoints.length - 1; i++) {
@@ -762,7 +768,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawLightning(x, width) {
-        // ATUALIZADO: x e width são lógicos, escalados para desenho
         const sX = x * scaleX;
         const sWidth = width * scaleX;
         
@@ -771,7 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.5})`;
         ctx.lineWidth = (1 + Math.random() * 4) * Math.min(scaleX, scaleY);
         ctx.beginPath();
-        let currentY = 0; // Começa no topo em pixels
+        let currentY = 0;
         let currentX = sX;
         ctx.moveTo(currentX, currentY);
         while(currentY < canvas.height) {
@@ -864,16 +869,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!player) return;
 
         let angle;
-        let speed = 10; // Velocidade lógica
+        let speed = 10 * SCALE_FACTOR; // Velocidade lógica
 
         if (enemy.isRicochet) {
             const wallX = (player.x > enemy.x) ? logicalWidth : 0;
             const virtualPlayerX = (wallX === 0) ? -player.x : (2 * logicalWidth - player.x);
             angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2));
-            speed = 14;
+            speed = 14 * SCALE_FACTOR;
         } else {
             angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2));
-            if (enemy.isSniper) speed = 16;
+            if (enemy.isSniper) speed = 16 * SCALE_FACTOR;
         }
 
         const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, 'enemy', enemy.id);
@@ -968,7 +973,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let currentAimAngle = aimStick.active ? aimStick.angle : Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
             ctx.save();
             ctx.beginPath();
-            // ATUALIZADO: Desenha mira escalando a partir de coordenadas lógicas
             ctx.moveTo((player.x + player.width / 2) * scaleX, (player.y + player.height / 2) * scaleY);
             ctx.lineTo(
                 (player.x + player.width / 2 + Math.cos(currentAimAngle) * 2000) * scaleX, 
@@ -1053,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const originEnemy = enemies.find(e => e.id === ep.originId);
                     if (originEnemy) {
                         const angle = Math.atan2(originEnemy.y - ep.y, originEnemy.x - ep.x);
-                        const reflectedProj = new Projectile(ep.x, ep.y, angle, 15, ep.damage * 3, '#FFFFFF', 'reflected', originEnemy.id);
+                        const reflectedProj = new Projectile(ep.x, ep.y, angle, 15 * SCALE_FACTOR, ep.damage * 3, '#FFFFFF', 'reflected', originEnemy.id);
                         reflectedProjectiles.push(reflectedProj);
                     }
                     if (isMultiplayer) socket.emit('enemyProjectileDestroyed', ep.id);
@@ -1068,7 +1072,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isMultiplayer) {
                         socket.emit('bladeHitEnemy', enemy.id);
                     } else {
-                        enemy.hp -= 150;
+                        // ATUALIZADO: "Reação Total" causa 70% da vida máxima
+                        const damage = enemy.maxHp * 0.7;
+                        enemy.hp -= damage;
                         if (enemy.hp <= 0) {
                             createCorpseExplosion(enemy);
                             const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
@@ -1248,18 +1254,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const currentWave = spState.wave;
         
-        const corpseExplosionNextLevelDamage = 150 * (1 + (player.corpseExplosionLevel) * 0.15);
+        // ATUALIZADO: Dano escalado
+        const corpseExplosionBaseDamage = 200; // 150 * 1.33
+        const corpseExplosionNextLevelDamage = corpseExplosionBaseDamage * (1 + (player.corpseExplosionLevel) * 0.15);
 
         const allUpgrades = [
             { name: "Cadência Rápida", desc: "+10% velocidade de tiro", apply: p => { p.shootCooldown *= 0.90; p.cadenceUpgrades++; }, available: p => p.cadenceUpgrades < 4 },
             { name: "Bala Potente", desc: "+20% dano", apply: p => p.bulletDamage = Math.ceil(p.bulletDamage * 1.2), available: () => true },
-            { name: "Pele de Aço", desc: "+25 HP máximo", apply: p => { p.maxHp += 25; p.hp += 25; }, available: () => true },
+            { name: "Pele de Aço", desc: `+${Math.floor(25 * SCALE_FACTOR)} HP máximo`, apply: p => { p.maxHp += Math.floor(25 * SCALE_FACTOR); p.hp += Math.floor(25 * SCALE_FACTOR); }, available: () => true }, // ATUALIZADO
             { name: "Velocista", desc: "+10% velocidade de mov.", apply: p => p.speed *= 1.1, available: () => true },
             { name: "Kit Médico", desc: "Cura 50% da vida máxima", apply: p => p.hp = Math.min(p.maxHp, p.hp + p.maxHp*0.5), available: () => true },
             { name: "Chame um Amigo", desc: "Cria um ajudante que atira.", apply: p => { p.ally = new Ally(p); if(isMultiplayer) socket.emit('playerGotAlly'); }, available: p => currentWave >= 4 && !p.ally && currentWave >= p.allyCooldownWave },
             { 
                 name: player.hasCorpseExplosion ? "Aprimorar Corpo Explosivo" : "Corpo Explosivo", 
-                desc: player.hasCorpseExplosion ? `Inimigos explodem em 8 projéteis ao morrer. Dano aumentado para ${Math.floor(corpseExplosionNextLevelDamage)} (+15%).` : "Inimigos explodem em 8 projéteis ao morrer (150 de dano).",
+                desc: player.hasCorpseExplosion ? `Inimigos explodem em 8 projéteis ao morrer. Dano aumentado para ${Math.floor(corpseExplosionNextLevelDamage)} (+15%).` : `Inimigos explodem em 8 projéteis ao morrer (${corpseExplosionBaseDamage} de dano).`, // ATUALIZADO
                 apply: p => {
                     p.hasCorpseExplosion = true;
                     p.corpseExplosionLevel++;
@@ -1268,8 +1276,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 available: p => currentWave >= 4 && p.corpseExplosionLevel < 5
             },
             { name: "Fúria dos Céus", desc: "A cada 9s, 3 raios caem do céu. Efeito permanente.", apply: p => { p.hasLightning = true; if(isMultiplayer) socket.emit('playerGotLightning'); }, available: p => currentWave >= 8 && !p.hasLightning },
-            { name: "Escudo Mágico", desc: "Cria um escudo com 2500 de vida. Renovar restaura-o.", apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 },
-            { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (150 dano). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction }
+            { name: "Escudo Mágico", desc: `Cria um escudo com ${Math.floor(2500 * SCALE_FACTOR)} de vida. Renovar restaura-o.`, apply: p => { p.shield.active = true; p.shield.hp = p.shield.maxHp; }, available: p => currentWave >= 5 }, // ATUALIZADO
+            { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (70% da vida máx.). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction } // ATUALIZADO
         ];
 
         const availableOptions = allUpgrades.filter(upg => upg.available(player));

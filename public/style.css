@@ -6,7 +6,7 @@
     --dark-bg: #000000;
     --dark-secondary: #0a0a0a;
     --main-font: 'VT323', monospace;
-    --neon-cyan: #00ffff;
+    --neon-yellow: #FFD700; /* ATUALIZADO: Amarelo incandescente para o escudo */
 }
 
 body, html {
@@ -166,8 +166,8 @@ body, html {
 #hpBarContainer, #expBarContainer, #shieldBarContainer {
     border: 2px solid var(--neon-green);
     padding: 3px;
-    width: clamp(100px, 15vmin, 200px); /* ATUALIZADO: vmin para escala uniforme */
-    height: clamp(12px, 2.2vmin, 20px); /* ATUALIZADO: vmin para escala uniforme */
+    width: clamp(100px, 15vmin, 200px);
+    height: clamp(12px, 2.2vmin, 20px);
     background-color: rgba(0, 255, 127, 0.05);
     position: relative;
 }
@@ -177,14 +177,16 @@ body, html {
     top: 50%;
     left: 5px;
     transform: translateY(-50%);
-    font-size: 0.8em; /* ATUALIZADO */
+    font-size: 0.8em;
 }
 #hpBar, #expBar, #shieldBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }
 #expBar { background-color: var(--neon-green); width: 0%; }
-#shieldBarContainer { border-color: var(--neon-cyan); background-color: rgba(0, 255, 255, 0.05); }
-#shieldBarContainer > span { color: var(--neon-cyan); }
-#shieldBar { background-color: var(--neon-cyan); width: 100%; }
+
+/* ATUALIZADO: Estilos do escudo para amarelo */
+#shieldBarContainer { border-color: var(--neon-yellow); background-color: rgba(255, 215, 0, 0.05); }
+#shieldBarContainer > span { color: var(--neon-yellow); }
+#shieldBar { background-color: var(--neon-yellow); width: 100%; }
 
 /* --- Controles Touch --- */
 #touchControls {
