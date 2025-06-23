@@ -7,7 +7,8 @@
     --dark-secondary: #0a0a0a;
     --main-font: 'VT323', monospace;
     --neon-yellow: #FFD700; /* Amarelo incandescente para o escudo */
-    --ui-opacity: 1; /* ATUALIZADO: Opacidade da UI */
+    --neon-blue: #00BFFF; /* ATUALIZADO: Azul para a barra de EXP */
+    --ui-opacity: 1; 
 }
 
 body, html {
@@ -124,7 +125,7 @@ body, html {
     gap: 10px;
     z-index: 10;
     pointer-events: none;
-    opacity: var(--ui-opacity); /* ATUALIZADO: Usa a variável de opacidade */
+    opacity: var(--ui-opacity);
     transition: opacity 0.3s;
 }
 #topBar > * { pointer-events: all; }
@@ -178,7 +179,11 @@ body, html {
 }
 #hpBar, #expBar, #shieldBar { height: 100%; transition: width 0.2s; }
 #hpBar { background-color: var(--neon-green); width: 100%; }
-#expBar { background-color: var(--neon-green); width: 0%; }
+
+/* ATUALIZADO: Estilos da barra de EXP para azul */
+#expBarContainer { border-color: var(--neon-blue); background-color: rgba(0, 191, 255, 0.05); }
+#expBarContainer > span { color: var(--neon-blue); }
+#expBar { background-color: var(--neon-blue); width: 0%; }
 
 /* Estilos do escudo para amarelo */
 #shieldBarContainer { border-color: var(--neon-yellow); background-color: rgba(255, 215, 0, 0.05); }
@@ -196,7 +201,7 @@ body, html {
     box-sizing: border-box;
     z-index: 50;
     pointer-events: none;
-    opacity: var(--ui-opacity); /* ATUALIZADO: Usa a variável de opacidade */
+    opacity: var(--ui-opacity);
     transition: opacity 0.3s;
 }
 
@@ -286,7 +291,7 @@ body.touch-enabled #touchControls { display: flex; }
 #rankingTable th { background-color: rgba(0, 255, 127, 0.2); }
 #rankingTable tr:nth-child(even) { background-color: rgba(0, 255, 127, 0.1); }
 
-/* --- ATUALIZADO: Estilos do Modal de Configurações --- */
+/* --- Estilos do Modal de Configurações --- */
 .setting-row {
     display: flex;
     justify-content: space-between;

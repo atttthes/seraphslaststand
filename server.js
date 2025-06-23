@@ -30,12 +30,10 @@ app.get('/api/ranking', async (req, res) => {
 
 app.post('/api/ranking', async (req, res) => {
     try {
-        // ATUALIZADO: Recebe waveReached do corpo da requisição
         const { name, timeSurvived, waveReached } = req.body;
         if (!name || typeof timeSurvived !== 'number' || typeof waveReached !== 'number') {
             return res.status(400).json({ error: "Dados inválidos." });
         }
-        // ATUALIZADO: Passa waveReached para a função de adicionar pontuação
         await db.addScore(name, timeSurvived, waveReached);
         res.status(201).json({ message: "Pontuação adicionada com sucesso!" });
     } catch (err) {
@@ -73,7 +71,6 @@ const WAVE_CONFIG = [
     { type: 'basic', color: '#FF4136', hp: Math.floor((168 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.28 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((25 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 2640, width: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD },
     { type: 'basic', color: '#FF4136', hp: Math.floor((210 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), speed: (1.36 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((30 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((22 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 2400, width: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (10 * SCALE_FACTOR) * ENEMY_SIZE_MOD }
 ];
-// ATUALIZAÇÃO: Vida do boss aumentada
 const BOSS_CONFIG = {
     type: 'boss', color: '#FFFFFF', hp: Math.floor((300 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR) + 80, speed: (0.8 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage: Math.floor((50 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), projectileDamage: Math.floor((35 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR), shootCooldown: 1440, width: (30 * SCALE_FACTOR) * ENEMY_SIZE_MOD, height: (30 * SCALE_FACTOR) * ENEMY_SIZE_MOD, isBoss: true
 };
@@ -86,9 +83,7 @@ const SNIPER_CONFIG = {
 const WAVE_INTERVAL_SECONDS = 10;
 
 
-// ATUALIZADO: Adicionada função de colisão no servidor
 function checkCollision(obj1, obj2) {
-    // Circle vs Circle collision
     if (obj1.radius && obj2.radius) {
         const dx = obj1.x - obj2.x;
         const dy = obj1.y - obj2.y;
@@ -96,7 +91,6 @@ function checkCollision(obj1, obj2) {
         return distance < obj1.radius + obj2.radius;
     }
 
-    // AABB (Rectangle vs Rectangle or Rectangle vs Circle)
     const r1 = obj1.radius || 0;
     const r2 = obj2.radius || 0;
     const w1 = obj1.width || 0;
@@ -118,7 +112,6 @@ function checkCollision(obj1, obj2) {
 }
 
 
-// --- Funções de escalonamento e spawn ---
 function getScalingFactor(wave) { if (wave <= 1) return 1.0; return 1.0 + Math.min(0.40, (wave - 1) * 0.05); }
 function getWaveConfig(wave) { const base = wave <= WAVE_CONFIG.length ? WAVE_CONFIG[wave - 1] : WAVE_CONFIG[WAVE_CONFIG.length - 1]; const scale = getScalingFactor(wave); return { ...base, hp: Math.floor(base.hp * scale), damage: Math.floor(base.damage * scale), projectileDamage: Math.floor(base.projectileDamage * scale) }; }
 function getBossConfig(wave) { const scale = getScalingFactor(wave); return { ...BOSS_CONFIG, hp: Math.floor(BOSS_CONFIG.hp * scale), damage: Math.floor(BOSS_CONFIG.damage * scale), projectileDamage: Math.floor(BOSS_CONFIG.projectileDamage * scale) }; }
@@ -126,7 +119,6 @@ function getRicochetConfig(wave) { const scale = getScalingFactor(wave); return 
 function findOrCreateRoom() {
     for (const name in rooms) { if (Object.keys(rooms[name].players).length < MAX_PLAYERS_PER_ROOM) return name; }
     const newName = `room_${Date.now()}`;
-    // ATUALIZAÇÃO: Adicionado 'playerProjectiles' para gerenciar disparos dos jogadores
     rooms[newName] = { players: {}, enemies: [], enemyProjectiles: [], playerProjectiles: [], lightningStrikes: [], gameTime: 0, wave: 0, waveState: 'intermission', waveTimer: 5, classShootingCooldowns: {}, bladeHits: {}, availableColors: [...AVAILABLE_PLAYER_COLORS], totalReactionHolderId: null };
     return newName;
 }
@@ -208,7 +200,12 @@ setInterval(() => {
                 for (let i = 0; i < 3; i++) {
                     const strikeX = Math.random() * LOGICAL_WIDTH; const strikeWidth = ((16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR) * 1.2;
                     room.lightningStrikes.push({ id: `strike_${Date.now()}_${Math.random()}`, x: strikeX, width: strikeWidth, creationTime: room.gameTime });
-                    room.enemies.forEach(enemy => { if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) { enemy.hp -= Math.floor(WAVE_CONFIG[0].hp * SCALE_DOWN_ATTR_FACTOR); } });
+                    room.enemies.forEach(enemy => { 
+                        if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) { 
+                            // ATUALIZADO: Raio tira 40% da vida máxima do inimigo
+                            enemy.hp -= enemy.maxHp * 0.4;
+                        } 
+                    });
                 }
                 room.enemies = room.enemies.filter(enemy => {
                     if (enemy.hp <= 0) { io.to(roomName).emit('enemyDied', { enemyId: enemy.id, killerId: player.id, expGain: enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50)) }); return false; }
@@ -226,16 +223,14 @@ setInterval(() => {
             const now = Date.now(); if (enemy.reachedPosition && now > (enemy.lastShotTime || 0) + enemy.shootCooldown) { if(room.gameTime >= (room.classShootingCooldowns[enemy.type] || 0)) { shootForEnemy(enemy, room, targetPlayer); room.classShootingCooldowns[enemy.type] = room.gameTime + ENEMY_SHOOT_DELAY_TICKS; } }
         });
 
-        // PROJÉTEIS INIMIGOS E COLISÃO (ATUALIZADO E CORRIGIDO)
+        // PROJÉTEIS INIMIGOS E COLISÃO
         for (let i = room.enemyProjectiles.length - 1; i >= 0; i--) {
             const p = room.enemyProjectiles[i];
             if (p.canRicochet && p.bouncesLeft > 0 && (p.x <= 0 || p.x >= LOGICAL_WIDTH)) { p.vx *= -1; p.bouncesLeft--; p.x = p.x <= 0 ? 1 : LOGICAL_WIDTH-1; }
             p.x += p.vx; p.y += p.vy;
             if (p.y > LOGICAL_HEIGHT+50 || p.y < -50 || p.x < -50 || p.x > LOGICAL_WIDTH+50) { room.enemyProjectiles.splice(i, 1); continue; }
             
-            // Itera por cada jogador para verificar a colisão com o projétil atual 'p'
             for (const player of playerList) {
-                // Lógica de colisão do escudo
                 if (player.shield && player.shield.active) {
                     const shieldRadius = player.hasAlly ? player.shield.baseRadius * 1.8 : player.shield.baseRadius;
                     const shieldHitbox = {
@@ -252,7 +247,6 @@ setInterval(() => {
                 }
                 if (room.enemyProjectiles[i] === undefined) break;
 
-                // Verifica colisão com o Aliado (se existir)
                 if (player.hasAlly) {
                     const allyHitbox = {
                         width: player.width / 1.5,
@@ -268,7 +262,6 @@ setInterval(() => {
                 }
                 if (room.enemyProjectiles[i] === undefined) break;
 
-                // Verifica colisão com o Jogador
                 if (checkCollision(p, player)) {
                     io.to(player.id).emit('playerHit', p.damage);
                     room.enemyProjectiles.splice(i, 1);
@@ -277,7 +270,7 @@ setInterval(() => {
             }
         }
         
-        // ATUALIZAÇÃO: LÓGICA DOS PROJÉTEIS DOS JOGADORES
+        // LÓGICA DOS PROJÉTEIS DOS JOGADORES
         for (let i = room.playerProjectiles.length - 1; i >= 0; i--) {
             const p = room.playerProjectiles[i];
             p.x += p.vx;
@@ -305,21 +298,17 @@ setInterval(() => {
             }
         }
         
-        // ATUALIZAÇÃO: COLISÃO ENTRE PROJÉTEIS DE JOGADOR E INIMIGO
+        // COLISÃO ENTRE PROJÉTEIS DE JOGADOR E INIMIGO
         for (let i = room.playerProjectiles.length - 1; i >= 0; i--) {
             for (let j = room.enemyProjectiles.length - 1; j >= 0; j--) {
                 const p_proj = room.playerProjectiles[i];
                 const e_proj = room.enemyProjectiles[j];
 
-                if (!p_proj) continue; // Projétil do jogador já foi destruído neste quadro.
+                if (!p_proj) continue;
 
                 if (checkCollision(p_proj, e_proj)) {
-                    // Colisão detectada, remover ambos os projéteis
                     room.playerProjectiles.splice(i, 1);
                     room.enemyProjectiles.splice(j, 1);
-                    
-                    // Como o projétil do jogador 'i' foi destruído,
-                    // podemos parar de verificar colisões para ele e ir para o próximo.
                     break; 
                 }
             }
@@ -347,7 +336,13 @@ io.on('connection', (socket) => {
             hasCorpseExplosion: false, 
             corpseExplosionLevel: 0, 
             allyCooldownWave: 0,
-            shield: { active: false, hp: 0, maxHp: 2250, baseRadius: ((16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR) * 0.8 * 1.1 },
+            shield: { 
+                active: false, 
+                hp: 0, 
+                maxHp: 2250, 
+                // ATUALIZADO: Raio do escudo aumentado em 10%
+                baseRadius: ((16 * SCALE_FACTOR) * SCALE_UP_SIZE_FACTOR) * 0.8 * 1.1 * 1.1 
+            },
             color
         };
         socket.emit('roomJoined', { logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -366,7 +361,6 @@ io.on('connection', (socket) => {
         } 
     });
 
-    // ATUALIZAÇÃO: Servidor cria o projétil
     socket.on('playerShoot', (bulletData) => {
         const room = rooms[socket.room];
         if (!room || !room.players[socket.id]) return;
@@ -386,8 +380,6 @@ io.on('connection', (socket) => {
         room.playerProjectiles.push(newProjectile);
     });
     
-    // ATUALIZAÇÃO: Evento 'enemyHit' foi removido pois o servidor agora lida com a colisão
-
     socket.on('playerUsedTotalReaction', () => { 
         const room = rooms[socket.room]; 
         if(room && room.players[socket.id]) {

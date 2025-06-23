@@ -104,7 +104,6 @@
                         <th>Pos.</th>
                         <th>Nome</th>
                         <th>Tempo (s)</th>
-                        <!-- ATUALIZADO: Cabeçalho da coluna alterado -->
                         <th>Horda</th>
                     </tr>
                 </thead>
@@ -114,7 +113,7 @@
         </div>
     </div>
 
-    <!-- ATUALIZADO: Modal de Configurações -->
+    <!-- Modal de Configurações -->
     <div id="settingsModal" class="modal" style="display: none;">
         <div class="modal-content">
             <h2>⚙️ Configurações</h2>
@@ -153,11 +152,23 @@
                 </div>
             </div>
             
+            <div class="setting-row">
+                <label for="musicVolumeSlider">Volume da Música</label>
+                 <div class="control-group">
+                    <input type="range" id="musicVolumeSlider" min="0" max="100" value="80">
+                    <span id="musicVolumeValue">80%</span>
+                </div>
+            </div>
+            
             <button id="saveSettingsBtn">Salvar e Fechar</button>
 
             <p class="settings-footer">Produzido Totalmente no celular por Athes.</p>
         </div>
     </div>
+
+    <!-- Elementos de Áudio -->
+    <audio id="lobbyMusic" src="cry_baby.mp3" loop></audio>
+    <audio id="clickSound" src="click.wav"></audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="game.js"></script>
