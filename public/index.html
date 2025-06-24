@@ -1,184 +1,176 @@
---- START OF FILE index.html ---
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Neon Outbreak</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Neon Outbreak</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="backgroundCanvas"></canvas>
-<div id="mainMenu">
-    <h1>Neon Outbreak</h1>
-    <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
-    <button id="startSinglePlayerBtn">Modo Um Jogador</button>
-    <button id="startMultiplayerBtn">Modo Cooperativo (até 4P)</button>
-    <button id="settingsBtn">⚙️ Configurações</button>
-    <button id="showRankingBtn">🏆 Ver Ranking</button>
-</div>
+    <canvas id="backgroundCanvas"></canvas>
 
-<!-- Wrapper para o Jogo e Controles Touch -->
-<div id="app-wrapper" style="display: none;">
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
+    <div id="mainMenu">
+        <h1>Neon Outbreak</h1>
+        <input type="text" id="playerNameInput" placeholder="Digite seu nome" maxlength="15">
+        <button id="startSinglePlayerBtn">Modo Um Jogador</button>
+        <button id="startMultiplayerBtn">Modo Cooperativo (até 4P)</button>
+        <button id="settingsBtn">⚙️ Configurações</button>
+        <button id="showRankingBtn">🏆 Ver Ranking</button>
+    </div>
 
-        <!-- UI do Jogo -->
-        <div id="topBar">
-            <div id="ui">
-                <div id="hpBarContainer">
-                    <span>HP</span>
-                    <div id="hpBar"></div>
+    <!-- Wrapper para o Jogo e Controles Touch -->
+    <div id="app-wrapper" style="display: none;">
+        <div id="gameContainer">
+            <canvas id="gameCanvas"></canvas>
+
+            <!-- UI do Jogo -->
+            <div id="topBar">
+                <div id="ui">
+                    <div id="hpBarContainer">
+                        <span>HP</span>
+                        <div id="hpBar"></div>
+                    </div>
+                    <div id="expBarContainer">
+                        <span>EXP</span>
+                        <div id="expBar"></div>
+                    </div>
+                    <div id="shieldBarContainer" style="display: none;">
+                        <span>ESCUDO</span>
+                        <div id="shieldBar"></div>
+                    </div>
                 </div>
-                <div id="expBarContainer">
-                    <span>EXP</span>
-                    <div id="expBar"></div>
+                
+                <div id="timer">Tempo: 0s</div>
+
+                <div id="gameControls">
+                    <div id="waveInfo">Horda: 0</div>
+                    <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
+                    <button id="quitBtn" title="Sair do Jogo">Sair</button>
                 </div>
-                <div id="shieldBarContainer" style="display: none;">
-                    <span>ESCUDO</span>
-                    <div id="shieldBar"></div>
+            </div>
+        </div>
+
+        <!-- Controles Touch -->
+        <div id="touchControls">
+            <div id="left-controls">
+                <div id="moveControlsContainer">
+                    <button id="touchLeft" class="touch-move-btn">◀</button>
+                    <button id="touchRight" class="touch-move-btn">▶</button>
+                </div>
+                <div id="abilityControls">
+                    <button id="touchJumpBtn" class="ability-btn" title="Pular">↑</button>
+                    <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
+                </div>
+            </div>
+            <div id="right-controls">
+                <div id="aimJoystick" class="joystick-container">
+                    <div id="aimJoystickKnob" class="joystick-knob"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Fim de Jogo -->
+    <div id="gameOverModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Fim de Jogo!</h2>
+            <p>Seu tempo de sobrevivência: <span id="finalTime">0</span>s</p>
+            <p>Você chegou até a <span id="finalWave">Horda 1</span>.</p>
+            <button id="restartBtn">Jogar Novamente</button>
+            <button id="backToMenuBtn">Voltar ao Menu</button>
+        </div>
+    </div>
+
+    <!-- Modal de Upgrade -->
+    <div id="upgradeModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Subiu de Nível!</h2>
+            <p>Escolha uma melhoria:</p>
+            <div id="upgradeOptions"></div>
+            <button id="rerollUpgradesBtn">Trocar Opções (0/1)</button>
+        </div>
+    </div>
+    
+    <!-- Modal do Ranking -->
+    <div id="rankingModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>🏆 Top Sobreviventes 🏆</h2>
+            <table id="rankingTable">
+                <thead>
+                    <tr>
+                        <th>Pos.</th>
+                        <th>Nome</th>
+                        <th>Tempo (s)</th>
+                        <th>Horda</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <button id="closeRankingBtn">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal de Configurações -->
+    <div id="settingsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>⚙️ Configurações</h2>
+            
+            <div class="setting-row">
+                <label>FPS do Jogo</label>
+                <div class="control-group" id="fpsSelector">
+                    <button data-fps="30">30 FPS</button>
+                    <button data-fps="60" class="active">60 FPS</button>
                 </div>
             </div>
             
-            <div id="timer">Tempo: 0s</div>
-
-            <div id="gameControls">
-                <div id="waveInfo">Horda: 0</div>
-                <button id="pauseBtn" title="Pausar Jogo" style="display: none;">❚❚</button>
-                <button id="quitBtn" title="Sair do Jogo">Sair</button>
+            <div class="setting-row">
+                <label>Efeitos Especiais (Rastros)</label>
+                 <div class="control-group">
+                    <label class="switch">
+                        <input type="checkbox" id="effectsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
+
+            <div class="setting-row">
+                <label for="uiOpacitySlider">Opacidade da UI</label>
+                <div class="control-group">
+                    <input type="range" id="uiOpacitySlider" min="10" max="100" value="100">
+                    <span id="uiOpacityValue">100%</span>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <label for="aimOpacitySlider">Opacidade da Mira</label>
+                 <div class="control-group">
+                    <input type="range" id="aimOpacitySlider" min="10" max="100" value="40">
+                    <span id="aimOpacityValue">40%</span>
+                </div>
+            </div>
+            
+            <div class="setting-row">
+                <label for="musicVolumeSlider">Volume da Música</label>
+                 <div class="control-group">
+                    <input type="range" id="musicVolumeSlider" min="0" max="100" value="80">
+                    <span id="musicVolumeValue">80%</span>
+                </div>
+            </div>
+            
+            <button id="saveSettingsBtn">Salvar e Fechar</button>
+
+            <p class="settings-footer">Produzido Totalmente no celular por Athes.</p>
         </div>
     </div>
 
-    <!-- Controles Touch -->
-    <div id="touchControls">
-        <div id="left-controls">
-            <div id="moveControlsContainer">
-                <button id="touchLeft" class="touch-move-btn">◀</button>
-                <button id="touchRight" class="touch-move-btn">▶</button>
-            </div>
-            <div id="abilityControls">
-                <button id="touchJumpBtn" class="ability-btn" title="Pular">↑</button>
-                <button id="totalReactionBtn" class="ability-btn" style="display: none;" title="Reação Total">⚔️</button>
-            </div>
-        </div>
-        <div id="right-controls">
-            <div id="aimJoystick" class="joystick-container">
-                <div id="aimJoystickKnob" class="joystick-knob"></div>
-            </div>
-        </div>
-    </div>
-</div>
+    <!-- Elementos de Áudio -->
+    <audio id="lobbyMusic" src="cry_baby.mp3" loop></audio>
+    <audio id="clickSound" src="click.wav"></audio>
 
-<!-- Modal de Fim de Jogo -->
-<div id="gameOverModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <h2>Fim de Jogo!</h2>
-        <p>Seu tempo de sobrevivência: <span id="finalTime">0</span>s</p>
-        <p>Você chegou até a <span id="finalWave">Horda 1</span>.</p>
-        <button id="restartBtn">Jogar Novamente</button>
-        <button id="backToMenuBtn">Voltar ao Menu</button>
-    </div>
-</div>
-
-<!-- Modal de Upgrade -->
-<div id="upgradeModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <h2>Subiu de Nível!</h2>
-        <p>Escolha uma melhoria:</p>
-        <div id="upgradeOptions"></div>
-        <button id="rerollUpgradesBtn">Trocar Opções (0/1)</button>
-    </div>
-</div>
-
-<!-- Modal do Ranking -->
-<div id="rankingModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <h2>🏆 Top Sobreviventes 🏆</h2>
-        <table id="rankingTable">
-            <thead>
-                <tr>
-                    <th>Pos.</th>
-                    <th>Nome</th>
-                    <th>Tempo (s)</th>
-                    <th>Horda</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-        <button id="closeRankingBtn">Fechar</button>
-    </div>
-</div>
-
-<!-- Modal de Configurações -->
-<div id="settingsModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <h2>⚙️ Configurações</h2>
-        
-        <div class="setting-row">
-            <label>FPS do Jogo</label>
-            <div class="control-group" id="fpsSelector">
-                <button data-fps="30">30 FPS</button>
-                <button data-fps="60" class="active">60 FPS</button>
-            </div>
-        </div>
-        
-        <div class="setting-row">
-            <label>Efeitos Especiais (Rastros)</label>
-             <div class="control-group">
-                <label class="switch">
-                    <input type="checkbox" id="effectsToggle" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-        </div>
-
-        <div class="setting-row">
-            <label for="uiOpacitySlider">Opacidade da UI</label>
-            <div class="control-group">
-                <input type="range" id="uiOpacitySlider" min="10" max="100" value="100">
-                <span id="uiOpacityValue">100%</span>
-            </div>
-        </div>
-
-        <div class="setting-row">
-            <label for="aimOpacitySlider">Opacidade da Mira</label>
-             <div class="control-group">
-                <input type="range" id="aimOpacitySlider" min="10" max="100" value="40">
-                <span id="aimOpacityValue">40%</span>
-            </div>
-        </div>
-        
-        <div class="setting-row">
-            <label for="musicVolumeSlider">Volume da Música</label>
-             <div class="control-group">
-                <input type="range" id="musicVolumeSlider" min="0" max="100" value="80">
-                <span id="musicVolumeValue">80%</span>
-            </div>
-        </div>
-
-        <div class="setting-row">
-            <label for="sfxVolumeSlider">Volume dos Efeitos</label>
-             <div class="control-group">
-                <input type="range" id="sfxVolumeSlider" min="0" max="100" value="100">
-                <span id="sfxVolumeValue">100%</span>
-            </div>
-        </div>
-        
-        <button id="saveSettingsBtn">Salvar e Fechar</button>
-
-        <p class="settings-footer">Produzido Totalmente no celular por Athes.</p>
-    </div>
-</div>
-
-<!-- Elementos de Áudio -->
-<audio id="lobbyMusic" src="cry_baby.mp3" loop></audio>
-<audio id="clickSound" src="click.wav"></audio>
-
-<script src="/socket.io/socket.io.js"></script>
-<script src="game.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
