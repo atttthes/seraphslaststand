@@ -1,5 +1,97 @@
 // game.js
 document.addEventListener('DOMContentLoaded', () => {
+    // --- ATUALIZADO: Classe Quadtree para otimização de colisão ---
+    class Quadtree {
+        constructor(bounds, maxObjects = 10, maxLevels = 4, level = 0) {
+            this.bounds = bounds;
+            this.maxObjects = maxObjects;
+            this.maxLevels = maxLevels;
+            this.level = level;
+            this.objects = [];
+            this.nodes = [];
+        }
+
+        split() {
+            const nextLevel = this.level + 1;
+            const subWidth = this.bounds.width / 2;
+            const subHeight = this.bounds.height / 2;
+            const x = this.bounds.x;
+            const y = this.bounds.y;
+
+            this.nodes[0] = new Quadtree({ x: x + subWidth, y: y, width: subWidth, height: subHeight }, this.maxObjects, this.maxLevels, nextLevel);
+            this.nodes[1] = new Quadtree({ x: x, y: y, width: subWidth, height: subHeight }, this.maxObjects, this.maxLevels, nextLevel);
+            this.nodes[2] = new Quadtree({ x: x, y: y + subHeight, width: subWidth, height: subHeight }, this.maxObjects, this.maxLevels, nextLevel);
+            this.nodes[3] = new Quadtree({ x: x + subWidth, y: y + subHeight, width: subWidth, height: subHeight }, this.maxObjects, this.maxLevels, nextLevel);
+        }
+
+        getIndex(rect) {
+            let index = -1;
+            const verticalMidpoint = this.bounds.x + (this.bounds.width / 2);
+            const horizontalMidpoint = this.bounds.y + (this.bounds.height / 2);
+
+            const topQuadrant = (rect.y < horizontalMidpoint && rect.y + (rect.height || rect.radius * 2) < horizontalMidpoint);
+            const bottomQuadrant = (rect.y > horizontalMidpoint);
+
+            if (rect.x < verticalMidpoint && rect.x + (rect.width || rect.radius * 2) < verticalMidpoint) {
+                if (topQuadrant) index = 1;
+                else if (bottomQuadrant) index = 2;
+            } else if (rect.x > verticalMidpoint) {
+                if (topQuadrant) index = 0;
+                else if (bottomQuadrant) index = 3;
+            }
+            return index;
+        }
+
+        insert(rect) {
+            if (this.nodes.length) {
+                const index = this.getIndex(rect);
+                if (index !== -1) {
+                    this.nodes[index].insert(rect);
+                    return;
+                }
+            }
+
+            this.objects.push(rect);
+
+            if (this.objects.length > this.maxObjects && this.level < this.maxLevels) {
+                if (!this.nodes.length) {
+                    this.split();
+                }
+                let i = 0;
+                while (i < this.objects.length) {
+                    const index = this.getIndex(this.objects[i]);
+                    if (index !== -1) {
+                        this.nodes[index].insert(this.objects.splice(i, 1)[0]);
+                    } else {
+                        i++;
+                    }
+                }
+            }
+        }
+
+        retrieve(rect) {
+            let returnObjects = this.objects;
+            const index = this.getIndex(rect);
+            if (this.nodes.length && index !== -1) {
+                returnObjects = returnObjects.concat(this.nodes[index].retrieve(rect));
+            }
+            returnObjects = returnObjects.concat(
+                this.objects.filter(obj => !this.getIndex(obj))
+            );
+            return returnObjects;
+        }
+        
+        clear() {
+            this.objects = [];
+            for (let i = 0; i < this.nodes.length; i++) {
+                if (this.nodes.length) {
+                    this.nodes[i].clear();
+                }
+            }
+            this.nodes = [];
+        }
+    }
+
     // --- DETECÇÃO DE DISPOSITIVO DE TOQUE ---
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (isTouchDevice) {
@@ -48,7 +140,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const uiOpacityValue = document.getElementById('uiOpacityValue');
     const aimOpacitySlider = document.getElementById('aimOpacitySlider');
     const aimOpacityValue = document.getElementById('aimOpacityValue');
-    // ATUALIZADO: Elementos de áudio
     const musicVolumeSlider = document.getElementById('musicVolumeSlider');
     const musicVolumeValue = document.getElementById('musicVolumeValue');
     const lobbyMusic = document.getElementById('lobbyMusic');
@@ -64,8 +155,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO DO JOGO ---
     let isGameRunning = false, isPaused = false, isGameOver = false, isMultiplayer = false;
     let gameTime = 0, animationFrameId, socket, playerName = "Jogador";
-    let player, otherPlayers = {}, enemies = [], projectiles = [], enemyProjectiles = [], particles = [], lightningStrikes = [];
+    let player, otherPlayers = {}, enemies = [], particles = [], lightningStrikes = [];
     
+    // --- ATUALIZADO: Pools de objetos e Quadtree ---
+    let quadtree;
+    const MAX_PROJECTILES = 400; // Limite aumentado para hordas massivas
+    let projectiles = [];
+    let enemyProjectiles = [];
+
     const logicalWidth = 1600, logicalHeight = 900;
     let scaleX = 1, scaleY = 1;
 
@@ -201,8 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
                 } else {
-                    const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
-                    projectiles.push(bullet);
+                    spawnPlayerProjectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.owner.bulletSpeed, this.owner.bulletDamage / 2, '#FFFFFF', 'player');
                 }
             }
         }
@@ -238,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.lastShootTime = 0;
             this.bulletSpeed = (18 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR;
             this.cadenceUpgrades = 0; 
-            this.damageUpgrades = 0; // ATUALIZADO: Contador de upgrades de dano
+            this.damageUpgrades = 0;
             this.ally = null; this.allyCooldownWave = 0;
             this.hasLightning = false; this.nextLightningTime = 0;
             this.hasTotalReaction = false; this.totalReactionReady = false; this.totalReactionCooldown = 3;
@@ -249,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 active: false,
                 hp: 0,
                 maxHp: 2250, 
-                // ATUALIZADO: Raio do escudo aumentado em 10%
                 baseRadius: this.width * 0.8 * 1.1 * 1.1,
                 auraFlicker: 0
             };
@@ -316,8 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         color: this.color 
                     });
                 } else {
-                    const bullet = new Projectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, this.color, 'player');
-                    projectiles.push(bullet);
+                    spawnPlayerProjectile(this.x + this.width / 2, this.y + this.height / 2, angle, this.bulletSpeed, this.bulletDamage, this.color, 'player');
                 }
             }
         }
@@ -373,18 +467,35 @@ document.addEventListener('DOMContentLoaded', () => {
             this.draw();
         }
     }
+    
+    // --- ATUALIZADO: Classe Projectile com estado 'active' para pooling ---
     class Projectile {
-        constructor(x, y, angle, speed, damage, color, owner = 'player', originId = null) {
+        constructor() {
+            this.active = false;
+            this.id = ''; this.x = 0; this.y = 0;
+            this.velocity = { x: 0, y: 0 };
+            this.damage = 0; this.owner = 'player'; this.color = '#FFF';
+            this.originId = null; this.trail = []; this.trailLength = 10;
+            this.radius = 0;
+            this.canRicochet = false; this.bouncesLeft = 0;
+        }
+
+        spawn(x, y, angle, speed, damage, color, owner = 'player', originId = null) {
+            this.active = true;
             this.id = `proj_${Date.now()}_${Math.random()}`;
             this.x = x; this.y = y;
             this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
             this.damage = damage; this.owner = owner; this.color = color;
             this.originId = originId;
-            this.trail = []; this.trailLength = 10;
             this.radius = (5 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR * ENEMY_AND_PROJECTILE_SIZE_INCREASE;
+            this.trail = [];
+            this.canRicochet = false;
+            this.bouncesLeft = 0;
+            return this;
         }
+
         drawTrail(aCtx = ctx) {
-            if (!gameSettings.effectsOn || this.trail.length < 2) return;
+            if (!this.active || !gameSettings.effectsOn || this.trail.length < 2) return;
             aCtx.save();
             aCtx.lineCap = 'round'; aCtx.lineJoin = 'round'; aCtx.strokeStyle = this.color; aCtx.shadowColor = this.color; aCtx.shadowBlur = 10;
             const sRadius = this.radius * Math.min(scaleX, scaleY);
@@ -397,17 +508,52 @@ document.addEventListener('DOMContentLoaded', () => {
             aCtx.restore();
         }
         draw(aCtx = ctx) {
+            if (!this.active) return;
             this.drawTrail(aCtx);
             const sX = this.x * scaleX; const sY = this.y * scaleY; const sRadius = this.radius * Math.min(scaleX, scaleY);
             aCtx.beginPath(); aCtx.arc(sX, sY, sRadius, 0, Math.PI * 2); aCtx.fillStyle = this.color;
             aCtx.shadowColor = this.color; aCtx.shadowBlur = 5; aCtx.fill(); aCtx.shadowBlur = 0;
         }
         update(aCtx = ctx) {
+            if (!this.active) return;
             this.trail.push({ x: this.x, y: this.y });
             if (this.trail.length > this.trailLength) this.trail.shift();
             this.x += this.velocity.x; this.y += this.velocity.y;
             this.draw(aCtx);
         }
+    }
+    
+    // --- ATUALIZADO: Funções de Pooling de Projéteis ---
+    function initProjectilePools() {
+        projectiles = [];
+        enemyProjectiles = [];
+        for (let i = 0; i < MAX_PROJECTILES; i++) {
+            projectiles.push(new Projectile());
+            enemyProjectiles.push(new Projectile());
+        }
+    }
+
+    function spawnPlayerProjectile(x, y, angle, speed, damage, color, owner, originId) {
+        for (let i = 0; i < projectiles.length; i++) {
+            if (!projectiles[i].active) {
+                return projectiles[i].spawn(x, y, angle, speed, damage, color, owner, originId);
+            }
+        }
+        return null; // Pool está cheio
+    }
+
+    function spawnEnemyProjectile(x, y, angle, speed, damage, color, owner, originId) {
+        for (let i = 0; i < enemyProjectiles.length; i++) {
+            if (!enemyProjectiles[i].active) {
+                const proj = enemyProjectiles[i].spawn(x, y, angle, speed, damage, color, owner, originId);
+                if (owner === 'ricochet') {
+                    proj.canRicochet = true;
+                    proj.bouncesLeft = 1;
+                }
+                return proj;
+            }
+        }
+        return null; // Pool está cheio
     }
     
     // --- FUNÇÕES DO JOGO ---
@@ -434,20 +580,32 @@ document.addEventListener('DOMContentLoaded', () => {
         cleanup(); isGameOver = false; gameTime = 0;
         lastFrameTime = 0;
         resizeCanvas();
+        
+        // --- ATUALIZADO: Inicializa o Quadtree e os Pools
+        quadtree = new Quadtree({ x: 0, y: 0, width: logicalWidth, height: logicalHeight });
+        initProjectilePools();
+
         player = new Player(logicalWidth / 2, logicalHeight - 200, playerName);
-        projectiles = []; enemies = []; enemyProjectiles = []; lightningStrikes = []; otherPlayers = {};
+        enemies = [];
+        lightningStrikes = [];
+        otherPlayers = {};
         reflectedProjectiles = [];
+        
         spState = { wave: 0, waveState: 'intermission', waveTimer: WAVE_INTERVAL_TICKS, classShootingCooldowns: { basic: 0, sniper: 0, ricochet: 0, boss: 0 } };
-        updateUI(); gameOverModal.style.display = 'none';
+        updateUI();
+        gameOverModal.style.display = 'none';
         if (isMultiplayer) { connectMultiplayer(); pauseBtn.style.display = 'none'; } 
         else { pauseBtn.style.display = 'block'; pauseBtn.textContent = '❚❚'; }
     }
     
     function resizeCanvas() {
-        backgroundCanvas.width = window.innerWidth; backgroundCanvas.height = window.innerHeight;
+        backgroundCanvas.width = window.innerWidth;
+        backgroundCanvas.height = window.innerHeight;
         const gameRect = gameContainer.getBoundingClientRect();
-        canvas.width = gameRect.width; canvas.height = gameRect.height;
-        scaleX = canvas.width / logicalWidth; scaleY = canvas.height / logicalHeight;
+        canvas.width = gameRect.width;
+        canvas.height = gameRect.height;
+        scaleX = canvas.width / logicalWidth;
+        scaleY = canvas.height / logicalHeight;
         floorPoints = floorPath.map(p => ({ x: p[0] * logicalWidth, y: p[1] * logicalHeight }));
     }
 
@@ -458,7 +616,8 @@ document.addEventListener('DOMContentLoaded', () => {
         isMultiplayer = multiplayer;
         mainMenu.style.display = 'none';
         appWrapper.style.display = 'flex';
-        init(); isGameRunning = true; 
+        init();
+        isGameRunning = true; 
         requestAnimationFrame(animate);
     }
     
@@ -469,7 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const damage = baseDamage * (1 + (player.corpseExplosionLevel - 1) * 0.05);
         for (let i = 0; i < numProjectiles; i++) {
             const angle = (i / numProjectiles) * Math.PI * 2;
-            projectiles.push(new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, (12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage, '#FFA500', 'corpse_explosion'));
+            spawnPlayerProjectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, (12 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, damage, '#FFA500', 'corpse_explosion');
         }
     }
 
@@ -480,34 +639,35 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('gameState', (state) => {
             if (!isGameRunning) return;
             gameTime = state.gameTime; spState.wave = state.wave; spState.waveState = state.waveState; spState.waveTimer = state.waveTimer * 60;
-            const serverEnemyIds = state.enemies.map(e => e.id); enemies = enemies.filter(e => serverEnemyIds.includes(e.id));
+            const serverEnemyIds = new Set(state.enemies.map(e => e.id)); 
+            enemies = enemies.filter(e => serverEnemyIds.has(e.id));
             state.enemies.forEach(eData => { let enemy = enemies.find(e => e.id === eData.id); if (enemy) { Object.assign(enemy, eData); } else { enemies.push(new Enemy({ ...eData })); } });
             lightningStrikes = state.lightningStrikes;
 
             if (state.playerProjectiles) {
-                const serverProjIds = new Set(state.playerProjectiles.map(p => p.id));
-                projectiles = projectiles.filter(p => serverProjIds.has(p.id));
-
+                projectiles.forEach(p => p.active = false);
                 state.playerProjectiles.forEach(pData => {
-                    let p = projectiles.find(proj => proj.id === pData.id);
+                    const p = spawnPlayerProjectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, pData.ownerId);
                     if (p) {
-                        p.x = pData.x;
-                        p.y = pData.y;
-                    } else {
-                        const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, pData.ownerId);
-                        newProj.id = pData.id;
-                        newProj.velocity = {x: pData.vx, y: pData.vy}; 
-                        projectiles.push(newProj);
+                        p.id = pData.id;
+                        p.velocity = {x: pData.vx, y: pData.vy}; 
                     }
                 });
             }
 
-            const serverProjectileIds = new Set(state.enemyProjectiles.map(p => p.id)); enemyProjectiles = enemyProjectiles.filter(ep => serverProjectileIds.has(ep.id));
-            state.enemyProjectiles.forEach(pData => {
-                let p = enemyProjectiles.find(ep => ep.id === pData.id);
-                if (!p) { const newProj = new Projectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, 'enemy', pData.originId); newProj.id = pData.id; newProj.velocity.x = pData.vx; newProj.velocity.y = pData.vy; newProj.radius = pData.radius; enemyProjectiles.push(newProj); } 
-                else { p.x = pData.x; p.y = pData.y; p.velocity.x = pData.vx; p.velocity.y = pData.vy; }
-            });
+            if (state.enemyProjectiles) {
+                enemyProjectiles.forEach(ep => ep.active = false);
+                state.enemyProjectiles.forEach(pData => {
+                    const ownerType = pData.isRicochet ? 'ricochet' : 'enemy';
+                    const p = spawnEnemyProjectile(pData.x, pData.y, 0, 0, pData.damage, pData.color, ownerType, pData.originId);
+                    if (p) {
+                        p.id = pData.id; 
+                        p.velocity.x = pData.vx; 
+                        p.velocity.y = pData.vy; 
+                        p.radius = pData.radius; 
+                    } 
+                });
+            }
             
             const currentOtherPlayerIds = new Set();
             for(const id in state.players) {
@@ -610,7 +770,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightningStrikes.push({ x: strikeX, width: strikeWidth, creationTime: gameTime });
                 enemies.forEach(enemy => { 
                     if (enemy.x + enemy.width > strikeX - strikeWidth / 2 && enemy.x < strikeX + strikeWidth / 2) { 
-                        // ATUALIZADO: Raio tira 40% da vida máxima do inimigo
                         enemy.hp -= enemy.maxHp * 0.4;
                     }
                 });
@@ -620,12 +779,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function shootForSPEnemy(enemy) {
-        if (!player) return; let angle; let speed = (10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR;
-        if (enemy.isRicochet) { const wallX = (player.x > enemy.x) ? logicalWidth : 0; const virtualPlayerX = (wallX === 0) ? -player.x : (2 * logicalWidth - player.x); angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2)); speed = (14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; }
+        if (!player) return; let angle; let speed = (10 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; let ownerType = 'enemy';
+        if (enemy.isRicochet) { const wallX = (player.x > enemy.x) ? logicalWidth : 0; const virtualPlayerX = (wallX === 0) ? -player.x : (2 * logicalWidth - player.x); angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (virtualPlayerX + player.width / 2) - (enemy.x + enemy.width / 2)); speed = (14 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; ownerType = 'ricochet'; }
         else { angle = Math.atan2((player.y + player.height / 2) - (enemy.y + enemy.height / 2), (player.x + player.width / 2) - (enemy.x + enemy.width / 2)); if (enemy.isSniper) speed = (16 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR; }
-        const newProj = new Projectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, 'enemy', enemy.id);
-        if (enemy.isRicochet) { newProj.canRicochet = true; newProj.bouncesLeft = 1; }
-        enemyProjectiles.push(newProj);
+        spawnEnemyProjectile(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, angle, speed, enemy.projectileDamage, enemy.color, ownerType, enemy.id);
     }
     function updateSinglePlayerLogic() {
         updateSPLightning();
@@ -661,6 +818,15 @@ document.addEventListener('DOMContentLoaded', () => {
         gameTime++;
         drawGameBackground();
         
+        // --- ATUALIZADO: Limpar e preencher o Quadtree a cada quadro ---
+        if (!isMultiplayer) {
+            quadtree.clear();
+            quadtree.insert(player);
+            if (player.ally) quadtree.insert(player.ally);
+            enemies.forEach(enemy => quadtree.insert(enemy));
+            projectiles.forEach(p => { if (p.active) quadtree.insert(p); });
+        }
+
         const isAiming = (aimStick.active || mouse.down);
         if (isAiming && player) {
             let currentAimAngle = aimStick.active ? aimStick.angle : Math.atan2(mouse.y - (player.y + player.height / 2), mouse.x - (player.x + player.width / 2));
@@ -682,27 +848,29 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(otherPlayers).forEach(p => p.draw());
         lightningStrikes.forEach(strike => { for(let i=0; i<3; i++) drawLightning(strike.x, strike.width); });
         
-        projectiles.forEach((p, i) => {
+        projectiles.forEach((p) => {
+            if (!p.active) return;
             p.update(); 
-            if (!isMultiplayer && (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight)) {
-                projectiles.splice(i, 1);
+            if (!isMultiplayer && (p.x < -10 || p.x > logicalWidth + 10 || p.y < -10 || p.y > logicalHeight + 10)) {
+                p.active = false;
             }
         });
         
         reflectedProjectiles.forEach((p, i) => { p.update(); if (p.x < 0 || p.x > logicalWidth || p.y < 0 || p.y > logicalHeight) { reflectedProjectiles.splice(i, 1); } });
         
-        enemyProjectiles.forEach((p, i) => {
+        enemyProjectiles.forEach((p) => {
+            if (!p.active) return;
             if (!isMultiplayer) { 
                 if (p.canRicochet && p.bouncesLeft > 0 && (p.x <= 0 || p.x >= logicalWidth)) {
                     p.velocity.x *= -1;
                     p.bouncesLeft--;
                     p.x = p.x <= 0 ? 1 : logicalWidth - 1;
                 }
-                p.update(); 
                 if (p.x < -50 || p.x > logicalWidth+50 || p.y < -50 || p.y > logicalHeight+50) { 
-                    enemyProjectiles.splice(i, 1);
+                    p.active = false;
                 }
-            } else { p.draw(); }
+            }
+            if (p.active) p.update();
         });
 
         if (reactionBlade.active) {
@@ -713,69 +881,46 @@ document.addEventListener('DOMContentLoaded', () => {
             if (reactionBlade.y < -50) reactionBlade.active = false;
         }
 
-        for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
-            const p = enemyProjectiles[i];
-            if (reactionBlade.active && checkCollision(p, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height, radius: 0})) {
-                const originEnemy = enemies.find(e => e.id === p.originId);
-                if (originEnemy) {
-                    const angle = Math.atan2(originEnemy.y - p.y, originEnemy.x - p.x);
-                    reflectedProjectiles.push(new Projectile(p.x, p.y, angle, (15 * SCALE_FACTOR) * SCALE_DOWN_ATTR_FACTOR, p.damage * 3, '#FFFFFF', 'reflected', originEnemy.id));
-                }
-                if (isMultiplayer) socket.emit('enemyProjectileDestroyed', p.id);
-                if (!isMultiplayer) enemyProjectiles.splice(i, 1);
-                continue;
-            }
-            if (checkCollision(player, p)) { player.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); } 
-            else if (player.ally && checkCollision(player.ally, p)) { player.ally.takeDamage(p.damage); if (!isMultiplayer) enemyProjectiles.splice(i, 1); }
-        }
-
-        enemies.forEach((enemy) => {
-            enemy.update();
-            if (reactionBlade.active && !reactionBlade.hitEnemies.includes(enemy.id) && checkCollision(enemy, {x: reactionBlade.x, y: reactionBlade.y, width: reactionBlade.width, height: reactionBlade.height, radius: 0})) {
-                reactionBlade.hitEnemies.push(enemy.id);
-                if (isMultiplayer) { socket.emit('bladeHitEnemy', enemy.id); } 
-                else {
-                    const damage = enemy.maxHp * 0.7; enemy.hp -= damage;
-                    if (enemy.hp <= 0) {
-                        createCorpseExplosion(enemy);
-                        setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50))); } }, 0);
+        if (!isMultiplayer) {
+            // Checa colisão de projéteis inimigos com o jogador/aliado
+            enemyProjectiles.forEach((p) => {
+                if (!p.active) return;
+                const potentialColliders = quadtree.retrieve(p);
+                for (const collider of potentialColliders) {
+                    if (p.active && (collider instanceof Player || collider instanceof Ally) && checkCollision(p, collider)) {
+                        collider.takeDamage(p.damage);
+                        p.active = false;
+                        break; 
                     }
                 }
-            }
-            if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
-            if (player.ally && checkCollision(player.ally, enemy)) player.ally.takeDamage(enemy.damage);
-            
-            if (!isMultiplayer) {
-                for (let projIndex = projectiles.length - 1; projIndex >= 0; projIndex--) {
-                    const proj = projectiles[projIndex];
-                    if((proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
-                        enemy.hp -= proj.damage;
-                        projectiles.splice(projIndex, 1);
-                        if(enemy.hp <= 0) {
-                            if(proj.owner !== 'corpse_explosion') createCorpseExplosion(enemy);
-                            const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
-                            setTimeout(() => { const currentIndex = enemies.findIndex(e => e.id === enemy.id); if (currentIndex !== -1) { enemies.splice(currentIndex, 1); player.addExp(expGain); } }, 0);
+            });
+
+            // Checa colisão de projéteis do jogador com inimigos
+            enemies.forEach((enemy) => {
+                // Checa colisão direta jogador-inimigo
+                if (checkCollision(player, enemy)) player.takeDamage(enemy.damage);
+                if (player.ally && checkCollision(player.ally, enemy)) player.ally.takeDamage(enemy.damage);
+
+                // Checa colisão projétil-inimigo
+                if (enemy.hp > 0) {
+                    const potentialProjectiles = quadtree.retrieve(enemy);
+                    for (const proj of potentialProjectiles) {
+                        if (proj instanceof Projectile && proj.active && (proj.owner === 'player' || proj.owner === 'corpse_explosion') && checkCollision(proj, enemy)) {
+                            enemy.hp -= proj.damage;
+                            proj.active = false; 
+                            if (enemy.hp <= 0) {
+                                createCorpseExplosion(enemy);
+                                const expGain = enemy.isBoss ? 1000 : (enemy.isSniper ? 75 : (enemy.isRicochet ? 60 : 50));
+                                player.addExp(expGain);
+                                break; 
+                            }
                         }
                     }
                 }
-            }
-        });
-        
-        if (!isMultiplayer) {
-            for (let i = projectiles.length - 1; i >= 0; i--) {
-                for (let j = enemyProjectiles.length - 1; j >= 0; j--) {
-                    const p_proj = projectiles[i];
-                    const e_proj = enemyProjectiles[j];
-
-                    if (!p_proj) continue;
-
-                    if (checkCollision(p_proj, e_proj)) {
-                        projectiles.splice(i, 1);
-                        enemyProjectiles.splice(j, 1);
-                        break;
-                    }
-                }
-            }
+            });
+            enemies = enemies.filter(e => e.hp > 0);
+        } else {
+             enemies.forEach(enemy => enemy.update());
         }
         
         updateUI();
@@ -858,11 +1003,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentWave = spState.wave;
         const corpseExplosionBaseDamage = Math.floor(200 * SCALE_DOWN_ATTR_FACTOR);
         const corpseExplosionNextLevelDamage = corpseExplosionBaseDamage * (1 + (player.corpseExplosionLevel) * 0.05);
-
-        // ATUALIZADO: Lógica do upgrade de dano
         const nextDmgIncrease = player.damageUpgrades < 3 ? '15%' : '10%';
         const damageUpgradeDesc = `+${nextDmgIncrease} de dano de disparo.`;
-
         const allUpgrades = [
             { name: "Cadência Rápida", desc: "+10% velocidade de tiro", apply: p => { p.shootCooldown *= 0.90; p.cadenceUpgrades++; }, available: p => p.cadenceUpgrades < 4 },
             { 
@@ -894,7 +1036,6 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             { name: "Reação Total", desc: "Lâmina que reflete projéteis (300% dano) e corta inimigos (70% da vida máx.). CD: 3 hordas.", apply: p => { p.hasTotalReaction = true; p.totalReactionReady = true; if(isMultiplayer) socket.emit('playerGotTotalReaction'); }, available: p => currentWave >= 13 && !p.hasTotalReaction && (!isMultiplayer || !Object.values(otherPlayers).some(op => op.hasTotalReaction)) }
         ];
-
         const availableOptions = allUpgrades.filter(upg => upg.available(player));
         const options = [...availableOptions].sort(() => 0.5 - Math.random()).slice(0, 4);
         options.forEach(upgrade => { const card = document.createElement('div'); card.className = 'upgrade-card'; card.innerHTML = `<h3>${upgrade.name}</h3><p>${upgrade.desc}</p>`; card.onclick = () => selectUpgrade(upgrade); upgradeOptionsContainer.appendChild(card); });
@@ -1000,12 +1141,11 @@ document.addEventListener('DOMContentLoaded', () => {
         lobbyMusic.volume = gameSettings.musicVolume / 100;
     });
 
-    // --- ATUALIZADO: LÓGICA DE ÁUDIO INICIAL ---
+    // --- LÓGICA DE ÁUDIO INICIAL ---
     function initAudioOnFirstInteraction() {
         if (lobbyMusic.paused) {
             lobbyMusic.play().catch(e => console.error("A reprodução de áudio foi bloqueada pelo navegador. Interaja com a página para ativar.", e));
         }
-        // Remove os listeners após a primeira interação para não rodar novamente
         document.removeEventListener('click', initAudioOnFirstInteraction);
         document.removeEventListener('touchstart', initAudioOnFirstInteraction);
     }
@@ -1017,5 +1157,5 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     initBackground();
     animateBackground();
-    updateSettingsUI(); // Garante que a UI das configurações reflita os valores carregados
+    updateSettingsUI();
 });
